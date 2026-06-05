@@ -1,5 +1,6 @@
 import type { CoachMessage, HintPack, PlayerMetrics, Puzzle, StoredAttempt } from "../shared/types";
 import type { LabCollectionRuntime } from "../shared/lab";
+import type { HellLayer } from "../shared/modes";
 import type { StageDefinition } from "../shared/puzzles";
 import type { GeneratePuzzleConfig, GeneratedPuzzleResult } from "../shared/generator";
 
@@ -27,6 +28,8 @@ export const api = {
   puzzles: () => request<{ puzzles: Puzzle[] }>("/api/puzzles"),
   puzzleIndex: () => request<{ puzzles: Puzzle[]; stages: StageDefinition[] }>("/api/puzzles"),
   lab: () => request<{ collections: LabCollectionRuntime[]; puzzles: Puzzle[] }>("/api/lab"),
+  hell: () => request<{ layers: HellLayer[] }>("/api/hell"),
+  race: () => request<{ puzzles: Puzzle[] }>("/api/race"),
   generate: (body: GeneratePuzzleConfig) =>
     request<GeneratedPuzzleResult>("/api/generate", {
       method: "POST",

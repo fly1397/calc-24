@@ -2,6 +2,7 @@ import express from "express";
 import path from "node:path";
 import { generatePuzzle } from "../shared/generator";
 import { generateWeeklyLabCollections } from "../shared/lab";
+import { findModePuzzle, generateHellLayers, generateRacePack } from "../shared/modes";
 import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, puzzles, stages } from "../shared/puzzles";
 import { coachForState, makeHints, recommendDifficulty, scoreAttempt } from "../shared/engine";
 import { addAttempt, attemptsForPuzzle, readStore } from "./store";
@@ -26,6 +27,14 @@ app.get("/api/lab", (_req, res) => {
   res.json({ collections, puzzles: collections.flatMap((collection) => collection.puzzles) });
 });
 
+app.get("/api/hell", (_req, res) => {
+  res.json({ layers: generateHellLayers() });
+});
+
+app.get("/api/race", (_req, res) => {
+  res.json({ puzzles: generateRacePack(new Date().toISOString().slice(0, 10), 10) });
+});
+
 app.post("/api/generate", (req, res) => {
   try {
     res.json(generatePuzzle(req.body));
@@ -36,7 +45,7 @@ app.post("/api/generate", (req, res) => {
 
 app.get("/api/puzzles/:id", (req, res) => {
   const weeklyLabPuzzles = generateWeeklyLabCollections(new Date()).flatMap((collection) => collection.puzzles);
-  const puzzle = getPuzzleById(req.params.id) ?? weeklyLabPuzzles.find((item) => item.id === req.params.id);
+  const puzzle = getPuzzleById(req.params.id) ?? weeklyLabPuzzles.find((item) => item.id === req.params.id) ?? findModePuzzle(req.params.id);
   if (!puzzle) {
     res.status(404).json({ error: "Puzzle not found" });
     return;

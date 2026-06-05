@@ -10,7 +10,9 @@ import {
   Play,
   RotateCcw,
   Share2,
+  Settings,
   Sparkles,
+  Timer,
   Trophy,
   Undo2
 } from "lucide-react";
@@ -18,12 +20,13 @@ import { useEffect, useMemo, useState } from "react";
 import { makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
 import { formatFraction } from "../shared/fraction";
 import type { LabCollectionRuntime } from "../shared/lab";
+import type { HellLayer } from "../shared/modes";
 import type { StageDefinition } from "../shared/puzzles";
 import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
 
-type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply";
-type Mode = "main" | "daily" | "training" | "lab";
+type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply" | "hell" | "settings";
+type Mode = "main" | "daily" | "training" | "lab" | "hell" | "race";
 type HistoryItem = { cards: CardState[] };
 type Stats = { attempts: number; solvedPuzzles: number; discoveredSolutions: number; archive: Array<{ puzzleId: string; discovered: number }> };
 
@@ -45,6 +48,7 @@ const defaultMetrics: PlayerMetrics = {
 
 const defaultWallet = { coins: 0, wisdomStars: 0 };
 const defaultInventory = { hintPacks: 0, deathShields: 0, jokers: 0, blindBoxTickets: 0 };
+const defaultDebug = { unlockAll: false, infiniteHints: false, sound: true, vibration: true, eyeCare: false };
 
 const useClock = (running: boolean, startedAt: number | null) => {
   const [now, setNow] = useState(Date.now());
@@ -82,11 +86,13 @@ function Home({
   onNavigate,
   onStartDaily,
   onStartTraining,
+  onStartRace,
   stats
 }: {
   onNavigate: (view: View) => void;
   onStartDaily: () => void;
   onStartTraining: () => void;
+  onStartRace: () => void;
   stats?: Stats;
 }) {
   return (
@@ -120,6 +126,16 @@ function Home({
           <strong>智能训练</strong>
           <span>根据表现动态调难</span>
         </button>
+        <button className="mode-tile" onClick={onStartRace}>
+          <Timer size={24} />
+          <strong>竞速排位</strong>
+          <span>10 题连战，秒表不中断</span>
+        </button>
+        <button className="mode-tile danger" onClick={() => onNavigate("hell")}>
+          <Trophy size={24} />
+          <strong>地狱模式</strong>
+          <span>18 层规则压迫</span>
+        </button>
         <button className="mode-tile" onClick={() => onNavigate("lab")}>
           <FlaskConical size={24} />
           <strong>异构实验室</strong>
@@ -134,6 +150,11 @@ function Home({
           <Sparkles size={24} />
           <strong>补给站</strong>
           <span>金币商店与科研盲盒</span>
+        </button>
+        <button className="mode-tile" onClick={() => onNavigate("settings")}>
+          <Settings size={24} />
+          <strong>设置</strong>
+          <span>调试开关与辅助选项</span>
         </button>
       </section>
 
@@ -205,7 +226,10 @@ function Game({
   recommendation,
   onBack,
   onSolved,
-  onNextTraining
+  onNextTraining,
+  onNextRace,
+  raceProgress,
+  debug
 }: {
   payload: PuzzlePayload;
   mode: Mode;
@@ -213,6 +237,9 @@ function Game({
   onBack: () => void;
   onSolved: (puzzleId: string, elapsedMs: number, hintsUsed: number, resets: number) => void;
   onNextTraining: () => void;
+  onNextRace: () => void;
+  raceProgress?: string;
+  debug: typeof defaultDebug;
 }) {
   const { puzzle, hints, solutionCount } = payload;
   const initialCards = useMemo(() => makeInitialCards(puzzle.cards), [puzzle.cards]);
@@ -347,7 +374,7 @@ function Game({
       <header className="topbar">
         <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
         <div>
-          <p className="eyebrow">{mode === "daily" ? "每日一题" : mode === "training" ? "智能训练" : puzzle.stage}</p>
+          <p className="eyebrow">{mode === "daily" ? "每日一题" : mode === "training" ? "智能训练" : mode === "race" ? `竞速 ${raceProgress ?? ""}` : puzzle.stage}</p>
           <h2>{puzzle.title} <span>{puzzle.level}/280</span></h2>
         </div>
         <div className="timer">{(elapsed / 1000).toFixed(1)}s</div>
@@ -394,7 +421,7 @@ function Game({
       <section className="tools">
         <button onClick={undo} disabled={!history.length || Boolean(solution)}><Undo2 size={18} />撤销</button>
         <button onClick={reset}><RotateCcw size={18} />重来</button>
-        <button onClick={() => setHintsUsed((value) => Math.min(value + 1, 4))}><Lightbulb size={18} />线索</button>
+        <button onClick={() => setHintsUsed((value) => Math.min(value + 1, debug.infiniteHints ? 99 : 4))}><Lightbulb size={18} />线索</button>
       </section>
 
       {hintsUsed > 0 && !solution && <HintBox hints={hints} level={hintsUsed} />}
@@ -410,6 +437,7 @@ function Game({
           mode={mode}
           onReset={reset}
           onNextTraining={onNextTraining}
+          onNextRace={onNextRace}
         />
       )}
     </main>
@@ -430,7 +458,8 @@ function ResultPanel({
   leaderboard,
   mode,
   onReset,
-  onNextTraining
+  onNextTraining,
+  onNextRace
 }: {
   solution: Solution;
   result: { isNew: boolean; score: number; discoveredCount: number } | null;
@@ -441,6 +470,7 @@ function ResultPanel({
   mode: Mode;
   onReset: () => void;
   onNextTraining: () => void;
+  onNextRace: () => void;
 }) {
   const shareText = `我用 ${(elapsed / 1000).toFixed(1)} 秒解开了这道 24 点：${solution.expression} = 24。Seed：${seed}`;
   const copyShare = async () => navigator.clipboard?.writeText(shareText);
@@ -466,6 +496,7 @@ function ResultPanel({
         <button onClick={onReset}><Sparkles size={18} />再找一种</button>
         <button onClick={copyShare}><Share2 size={18} />复制挑战</button>
         {mode === "training" && <button onClick={onNextTraining}><Brain size={18} />下一题</button>}
+        {mode === "race" && <button onClick={onNextRace}><Timer size={18} />下一题</button>}
       </div>
       {leaderboard.length > 0 && (
         <div className="leaderboard">
@@ -692,11 +723,85 @@ function SupplyView({
   );
 }
 
+function HellView({
+  layers,
+  solved,
+  debug,
+  onBack,
+  onPick
+}: {
+  layers: HellLayer[];
+  solved: string[];
+  debug: typeof defaultDebug;
+  onBack: () => void;
+  onPick: (puzzle: Puzzle) => void;
+}) {
+  const [layerIndex, setLayerIndex] = useState(0);
+  const layer = layers[layerIndex];
+  const unlockedLayer = debug.unlockAll || layerIndex === 0 || layers[layerIndex - 1]?.puzzles.some((puzzle) => solved.includes(puzzle.id));
+  return (
+    <main className="screen hell-screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">地狱模式</p><h2>{layer?.name ?? "深渊"}</h2></div>
+      </header>
+      <section className="stage-tabs hell-tabs">
+        {layers.map((item, index) => (
+          <button key={item.id} className={layerIndex === index ? "active" : ""} onClick={() => setLayerIndex(index)}>
+            {index + 1}
+          </button>
+        ))}
+      </section>
+      <p className="stage-theme">{layer?.subtitle}</p>
+      {!unlockedLayer ? <p className="empty">战争迷雾尚未散去。通关上一层后解锁。</p> : (
+        <section className="level-grid">
+          {layer?.puzzles.map((puzzle) => (
+            <button key={puzzle.id} className={`level-cell hell-cell ${solved.includes(puzzle.id) ? "done" : ""} ${puzzle.boss ? "exam" : ""}`} onClick={() => onPick(puzzle)}>
+              {puzzle.boss ? <Trophy size={22} /> : puzzle.stageLevel}
+              <small>DS {puzzle.ds}</small>
+            </button>
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}
+
+function SettingsView({
+  debug,
+  onBack,
+  onChange
+}: {
+  debug: typeof defaultDebug;
+  onBack: () => void;
+  onChange: (debug: typeof defaultDebug) => void;
+}) {
+  const toggle = (key: keyof typeof defaultDebug) => onChange({ ...debug, [key]: !debug[key] });
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">设置</p><h2>调试与辅助</h2></div>
+      </header>
+      <section className="settings-list">
+        <button onClick={() => toggle("unlockAll")}><strong>解锁全部关卡</strong><span>{debug.unlockAll ? "已开启" : "已关闭"}</span></button>
+        <button onClick={() => toggle("infiniteHints")}><strong>无限提示</strong><span>{debug.infiniteHints ? "已开启" : "已关闭"}</span></button>
+        <button onClick={() => toggle("sound")}><strong>音效</strong><span>{debug.sound ? "已开启" : "已关闭"}</span></button>
+        <button onClick={() => toggle("vibration")}><strong>震动</strong><span>{debug.vibration ? "已开启" : "已关闭"}</span></button>
+        <button onClick={() => toggle("eyeCare")}><strong>护眼模式</strong><span>{debug.eyeCare ? "已开启" : "已关闭"}</span></button>
+      </section>
+    </main>
+  );
+}
+
 export function App() {
   const [view, setView] = useState<View>("home");
   const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
   const [labPuzzles, setLabPuzzles] = useState<Puzzle[]>([]);
   const [labCollections, setLabCollections] = useState<LabCollectionRuntime[]>([]);
+  const [hellLayers, setHellLayers] = useState<HellLayer[]>([]);
+  const [racePack, setRacePack] = useState<Puzzle[]>([]);
+  const [raceIndex, setRaceIndex] = useState(0);
   const [stages, setStages] = useState<StageDefinition[]>([]);
   const [payload, setPayload] = useState<PuzzlePayload | null>(null);
   const [mode, setMode] = useState<Mode>("main");
@@ -705,6 +810,7 @@ export function App() {
   const [metrics, setMetrics] = useState(() => loadLocal<PlayerMetrics>("metrics", defaultMetrics));
   const [wallet, setWallet] = useState(() => loadLocal("wallet", defaultWallet));
   const [inventory, setInventory] = useState(() => loadLocal("inventory", defaultInventory));
+  const [debug, setDebug] = useState(() => loadLocal("debug", defaultDebug));
   const [stats, setStats] = useState<Stats>();
 
   useEffect(() => {
@@ -716,6 +822,7 @@ export function App() {
       setLabPuzzles(data.puzzles);
       setLabCollections(data.collections);
     });
+    api.hell().then((data) => setHellLayers(data.layers));
     api.stats().then(setStats).catch(() => undefined);
   }, []);
 
@@ -737,12 +844,39 @@ export function App() {
     setView("game");
   };
 
+  const startRace = async () => {
+    const data = await api.race();
+    setRacePack(data.puzzles);
+    setRaceIndex(0);
+    const first = data.puzzles[0];
+    if (!first) return;
+    const payload = await api.puzzle(first.id);
+    setPayload(payload);
+    setMode("race");
+    setRecommendation("随机 10 题，秒表不中断。答完后点击下一题继续。");
+    setView("game");
+  };
+
   const startTraining = async () => {
     const data = await api.trainingNext({ ...metrics, excludeIds: solved });
     setPayload(data);
     setMode("training");
     setRecommendation(data.recommendation.reason);
     setView("game");
+  };
+
+  const nextRace = async () => {
+    const nextIndex = raceIndex + 1;
+    setRaceIndex(nextIndex);
+    const next = racePack[nextIndex];
+    if (!next) {
+      setView("home");
+      return;
+    }
+    const data = await api.puzzle(next.id);
+    setPayload(data);
+    setMode("race");
+    setRecommendation(`竞速进度 ${nextIndex + 1}/${racePack.length}`);
   };
 
   const markSolved = (puzzleId: string, elapsedMs: number, hintsUsed: number, resets: number) => {
@@ -774,18 +908,34 @@ export function App() {
         payload={payload}
         mode={mode}
         recommendation={recommendation}
+        raceProgress={mode === "race" ? `${raceIndex + 1}/${racePack.length || 10}` : undefined}
+        debug={debug}
         onBack={() => setView(mode === "main" ? "map" : "home")}
         onSolved={markSolved}
         onNextTraining={startTraining}
+        onNextRace={nextRace}
       />
     );
-  }, [payload, mode, recommendation, solved, metrics, wallet]);
+  }, [payload, mode, recommendation, solved, metrics, wallet, debug, raceIndex, racePack]);
 
   if (view === "game" && currentGame) return currentGame;
   if (view === "map") return <LevelMap puzzles={puzzles} stages={stages} solved={solved} onBack={() => setView("home")} onPick={startPuzzle} />;
   if (view === "clinic") return <Clinic puzzles={puzzles} onBack={() => setView("home")} onPick={startPuzzle} />;
   if (view === "archive") return <ArchiveView puzzles={[...puzzles, ...labPuzzles]} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} onNavigate={setView} />;
   if (view === "lab") return <LabView collections={labCollections} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} onNavigate={setView} />;
+  if (view === "hell") return <HellView layers={hellLayers} solved={solved} debug={debug} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "hell")} />;
+  if (view === "settings") {
+    return (
+      <SettingsView
+        debug={debug}
+        onBack={() => setView("home")}
+        onChange={(next) => {
+          setDebug(next);
+          saveLocal("debug", next);
+        }}
+      />
+    );
+  }
   if (view === "supply") {
     return (
       <SupplyView
@@ -802,5 +952,5 @@ export function App() {
       />
     );
   }
-  return <Home onNavigate={setView} onStartDaily={startDaily} onStartTraining={startTraining} stats={stats} />;
+  return <Home onNavigate={setView} onStartDaily={startDaily} onStartTraining={startTraining} onStartRace={startRace} stats={stats} />;
 }

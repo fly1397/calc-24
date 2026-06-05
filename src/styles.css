@@ -179,6 +179,12 @@ h2 span {
   color: #fff;
 }
 
+.mode-tile.danger {
+  background: #2a0709;
+  color: #fff;
+  border-color: #7a1721;
+}
+
 .mode-tile strong {
   font-size: 18px;
 }
@@ -191,6 +197,10 @@ h2 span {
 
 .mode-tile.primary span {
   color: #b7f4df;
+}
+
+.mode-tile.danger span {
+  color: #ffb2b8;
 }
 
 .primary-action,
@@ -338,6 +348,32 @@ h2 span {
 
 .level-cell.exam {
   background: #ffe38a;
+}
+
+.hell-screen {
+  background: linear-gradient(180deg, #160607, #2a0709 48%, #110506);
+  color: #fff;
+}
+
+.hell-screen .eyebrow,
+.hell-screen .stage-theme,
+.hell-screen .empty {
+  color: #ffb2b8;
+}
+
+.hell-tabs button {
+  background: #3b1115;
+  color: #ffb2b8;
+}
+
+.hell-tabs button.active,
+.hell-cell {
+  background: #e02936;
+  color: #fff;
+}
+
+.hell-cell small {
+  color: #ffe0e2;
 }
 
 .game {
@@ -746,6 +782,33 @@ h2 span {
   border-radius: 8px;
   background: #ff6b1a;
   color: #fff;
+  font-weight: 900;
+}
+
+.settings-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.settings-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 60px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+}
+
+.settings-list strong {
+  font-size: 16px;
+}
+
+.settings-list span {
+  color: #16a184;
+  font-size: 13px;
   font-weight: 900;
 }
 
