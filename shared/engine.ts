@@ -29,6 +29,10 @@ const precedence = (op: Operator): number => (op === "+" || op === "-" ? 1 : op 
 
 export const expressionToString = (node: ExprNode, parentOp?: Operator, isRight = false): string => {
   if (node.type === "leaf") return node.label;
+  if (node.type === "unary") {
+    const inner = expressionToString(node.child);
+    return node.op === "square" ? `${inner}²` : node.op === "sqrt" ? `√${inner}` : `${inner}!`;
+  }
   const left = expressionToString(node.left, node.op, false);
   const right = expressionToString(node.right, node.op, true);
   let text = `${left} ${opLabel(node.op)} ${right}`;
@@ -41,6 +45,9 @@ export const expressionToString = (node: ExprNode, parentOp?: Operator, isRight 
 
 export const buildSteps = (node: ExprNode): string[] => {
   if (node.type === "leaf") return [];
+  if (node.type === "unary") {
+    return [...buildSteps(node.child), `${expressionToString(node)} = ${formatFraction(node.value)}`];
+  }
   return [
     ...buildSteps(node.left),
     ...buildSteps(node.right),
@@ -50,6 +57,7 @@ export const buildSteps = (node: ExprNode): string[] => {
 
 const canonical = (node: ExprNode): string => {
   if (node.type === "leaf") return `n${formatFraction(node.value)}`;
+  if (node.type === "unary") return `${node.op}(${canonical(node.child)})`;
   const flatten = (target: Operator, item: ExprNode): string[] => {
     if (item.type === "op" && item.op === target && (target === "+" || target === "*")) {
       return [...flatten(target, item.left), ...flatten(target, item.right)];
@@ -66,6 +74,14 @@ const solutionTags = (node: ExprNode): string[] => {
   const tags = new Set<string>();
   const walk = (item: ExprNode) => {
     if (item.type === "leaf") return;
+    if (item.type === "unary") {
+      tags.add("高阶符号");
+      if (item.op === "square") tags.add("平方");
+      if (item.op === "sqrt") tags.add("开方");
+      if (item.op === "factorial") tags.add("阶乘");
+      walk(item.child);
+      return;
+    }
     if (item.op === "concat") tags.add("数字拼接");
     if (item.op === "/") tags.add("除法解");
     if (item.value.d !== 1) tags.add("分数中转");
@@ -133,7 +149,7 @@ export const applyUnaryCard = (card: CardState, op: UnaryOperator, ruleSet: Rule
   return {
     id: `${card.id}-${op}`,
     value: next,
-    expr: { type: "leaf", value: next, cardId: `${card.id}-${op}`, label }
+    expr: { type: "unary", value: next, op, child: card.expr }
   };
 };
 
@@ -146,12 +162,20 @@ export const solutionFromNode = (node: ExprNode): Solution => ({
 
 const containsOperator = (node: ExprNode, op: Operator): boolean => {
   if (node.type === "leaf") return false;
+  if (node.type === "unary") return containsOperator(node.child, op);
   return node.op === op || containsOperator(node.left, op) || containsOperator(node.right, op);
+};
+
+const containsUnary = (node: ExprNode): boolean => {
+  if (node.type === "leaf") return false;
+  if (node.type === "unary") return true;
+  return containsUnary(node.left) || containsUnary(node.right);
 };
 
 export const satisfiesRule = (node: ExprNode, ruleSet: RuleSet): boolean => {
   if (ruleSet.requiredOperator && !containsOperator(node, ruleSet.requiredOperator)) return false;
   if (ruleSet.finalOperator && (node.type !== "op" || node.op !== ruleSet.finalOperator)) return false;
+  if (ruleSet.requiredUnary && !containsUnary(node)) return false;
   return true;
 };
 
@@ -186,14 +210,34 @@ export const solvePuzzle = (numbers: number[], target = 24, maxSolutions = 80, r
   }
   const targetValue = makeFraction(target);
   const seen = new Map<string, Solution>();
+  const searched = new Set<string>();
+  const stateKey = (cards: CardState[]) =>
+    cards
+      .map((card) => `${formatFraction(card.value)}:${canonical(card.expr)}`)
+      .sort()
+      .join("|");
   const search = (cards: CardState[]) => {
     if (seen.size >= maxSolutions) return;
+    const key = stateKey(cards);
+    if (searched.has(key)) return;
+    searched.add(key);
     if (cards.length === 1) {
       if (equalsFraction(cards[0].value, targetValue) && satisfiesRule(cards[0].expr, ruleSet)) {
         const solution = solutionFromNode(cards[0].expr);
         seen.set(solution.key, solution);
       }
       return;
+    }
+    if (ruleSet.unaryOperators?.length) {
+      for (let i = 0; i < cards.length; i += 1) {
+        if (cards[i].expr.type === "unary") continue;
+        for (const op of ruleSet.unaryOperators) {
+          const nextCard = applyUnaryCard(cards[i], op, ruleSet);
+          if (!nextCard) continue;
+          if (Math.abs(nextCard.value.n / nextCard.value.d) > 720) continue;
+          search(cards.map((card, index) => (index === i ? nextCard : card)));
+        }
+      }
     }
     for (let i = 0; i < cards.length; i += 1) {
       for (let j = 0; j < cards.length; j += 1) {

@@ -546,6 +546,27 @@ h2 span {
   font-weight: 800;
 }
 
+.hint-box.warning {
+  background: #fff1eb;
+  color: #a8420b;
+}
+
+.rule-note {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.rule-note span {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #17202f;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .coach-box {
   display: flex;
   align-items: center;

@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { applyUnaryCard, makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
-import { formatFraction, makeFraction } from "../shared/fraction";
+import { equalsFraction, formatFraction, makeFraction } from "../shared/fraction";
 import type { LabCollectionRuntime } from "../shared/lab";
 import type { HellLayer } from "../shared/modes";
 import type { StageDefinition } from "../shared/puzzles";
@@ -256,6 +256,7 @@ function Game({
   const [result, setResult] = useState<{ isNew: boolean; score: number; discoveredCount: number } | null>(null);
   const [leaderboard, setLeaderboard] = useState<Array<StoredAttempt & { score: number }>>([]);
   const [coach, setCoach] = useState<CoachMessage | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const elapsed = useClock(!solution, startedAt);
 
   useEffect(() => {
@@ -271,6 +272,7 @@ function Game({
     setSolution(null);
     setResult(null);
     setCoach(null);
+    setNotice(null);
     api.leaderboard(puzzle.id).then((data) => setLeaderboard(data.rows)).catch(() => setLeaderboard([]));
   }, [puzzle.id, puzzle.cards, puzzle.specialCards, puzzle.ruleSet.useCount]);
 
@@ -283,7 +285,12 @@ function Game({
   }, [Math.floor(elapsed / 20000), solution, hintsUsed, cards.length, puzzle.id]);
 
   const completeIfSolved = async (nextCards: CardState[]) => {
-    if (!isSolved(nextCards, undefined, puzzle.ruleSet)) return;
+    if (!isSolved(nextCards, undefined, puzzle.ruleSet)) {
+      if (nextCards.length === 1 && equalsFraction(nextCards[0].value, makeFraction(puzzle.target))) {
+        setNotice(puzzle.ruleSet.requiredUnary ? "已经得到 24，但本关必须使用至少一个高阶符号。" : "已经得到 24，但还没有满足本关限制规则。");
+      }
+      return;
+    }
     const solved = solutionFromNode(nextCards[0].expr);
     setSolution(solved);
     const elapsedMs = Date.now() - (startedAt ?? Date.now());
@@ -302,7 +309,10 @@ function Game({
     const left = resolveCard(cards.find((card) => card.id === leftId));
     const right = resolveCard(cards.find((card) => card.id === rightId));
     if (!left || !right) return;
-    if (history.length < 2 && (left.special?.type === "frost" || right.special?.type === "frost")) return;
+    if (history.length < 2 && (left.special?.type === "frost" || right.special?.type === "frost")) {
+      setNotice("冰冻牌前两步不能参与运算，请先处理其他牌。");
+      return;
+    }
     const merged = mergeCards(left, right, op, puzzle.ruleSet);
     if (!merged) return;
     const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
@@ -329,7 +339,10 @@ function Game({
     if (solution || selectedCards.length !== 1) return;
     const current = resolveCard(cards.find((card) => card.id === selectedCards[0]));
     if (!current) return;
-    if (history.length < 2 && current.special?.type === "frost") return;
+    if (history.length < 2 && current.special?.type === "frost") {
+      setNotice("冰冻牌前两步不能参与运算，请先处理其他牌。");
+      return;
+    }
     const nextCard = applyUnaryCard(current, op, puzzle.ruleSet);
     if (!nextCard) return;
     const next = cards.map((card) => (card.id === selectedCards[0] ? nextCard : card));
@@ -423,6 +436,17 @@ function Game({
         <span>DS {puzzle.ds}</span>
         <span>{solutionCount} 种参考解</span>
       </section>
+      {puzzle.specialCards?.length ? (
+        <section className="rule-note">
+          {puzzle.specialCards.map((card) => (
+            <span key={`${card.index}-${card.type}`}>
+              {card.type === "frost" ? "冰冻：前两步禁用" : card.type === "ghost" ? `幻影：每3秒切换为 ${card.altValue}` : "小丑：选中后可变 1-9"}
+            </span>
+          ))}
+        </section>
+      ) : null}
+      {puzzle.ruleSet.requiredUnary && <section className="rule-note"><span>本关必须使用平方、开方或阶乘。</span></section>}
+      {notice && <section className="hint-box warning">{notice}</section>}
       {recommendation && <section className="coach-box focus"><Brain size={18} />{recommendation}</section>}
       {coach && !solution && <section className={`coach-box ${coach.tone}`}><Brain size={18} />{coach.text}</section>}
 

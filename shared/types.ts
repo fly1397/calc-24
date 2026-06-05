@@ -21,6 +21,7 @@ export type RuleSet = {
   useCount: number;
   requiredOperator?: Operator;
   finalOperator?: Operator;
+  requiredUnary?: boolean;
   specialCards?: SpecialCardSpec[];
 };
 
@@ -35,6 +36,12 @@ export type ExprNode =
       value: Fraction;
       cardId: string;
       label: string;
+    }
+  | {
+      type: "unary";
+      value: Fraction;
+      op: UnaryOperator;
+      child: ExprNode;
     }
   | {
       type: "op";
