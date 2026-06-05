@@ -12,15 +12,17 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "express": "^5.2.1",
+    "gsap": "^3.15.0",
     "lucide-react": "^0.562.0",
-    "vite": "^7.2.7",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

@@ -16,6 +16,8 @@ import {
   Trophy,
   Undo2
 } from "lucide-react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { applyUnaryCard, makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
 import { equalsFraction, formatFraction, makeFraction } from "../shared/fraction";
@@ -24,6 +26,8 @@ import type { HellLayer } from "../shared/modes";
 import type { StageDefinition } from "../shared/puzzles";
 import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt, UnaryOperator } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
+
+gsap.registerPlugin(useGSAP);
 
 type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply" | "hell" | "settings";
 type Mode = "main" | "daily" | "training" | "lab" | "hell" | "race";
@@ -97,8 +101,18 @@ function Home({
   onStartRace: () => void;
   stats?: Stats;
 }) {
+  const homeRef = useRef<HTMLElement | null>(null);
+  useGSAP(() => {
+    gsap.from(".brand, .daily-band, .mode-tile, .stats", {
+      y: 18,
+      autoAlpha: 0,
+      duration: 0.45,
+      ease: "power3.out",
+      stagger: 0.045
+    });
+  }, { scope: homeRef });
   return (
-    <main className="screen home">
+    <main ref={homeRef} className="screen home">
       <section className="brand">
         <div className="brand-mark">24</div>
         <div>
@@ -264,6 +278,17 @@ function Game({
   const [notice, setNotice] = useState<string | null>(null);
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const elapsed = useClock(!solution, startedAt);
+  const gameRef = useRef<HTMLElement | null>(null);
+
+  useGSAP(() => {
+    gsap.from(".topbar, .puzzle-info, .selection-guide, .number-card, .op-button, .tools button", {
+      y: 14,
+      autoAlpha: 0,
+      duration: 0.36,
+      ease: "power2.out",
+      stagger: 0.025
+    });
+  }, { scope: gameRef, dependencies: [puzzle.id], revertOnUpdate: true });
 
   useEffect(() => {
     const nextInitial = makeInitialCards(puzzle.cards, puzzle.specialCards);
@@ -329,14 +354,25 @@ function Game({
     const dx = fromRect && toRect ? toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2) : -80;
     const dy = fromRect && toRect ? toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2) : -24;
     setMergeAnimation({ fromId: leftId, toId: rightId, dx, dy });
-    window.setTimeout(() => {
+    const fromEl = cardRefs.current[leftId];
+    const toEl = cardRefs.current[rightId];
+    const tl = gsap.timeline({
+      defaults: { duration: 0.22, ease: "power3.inOut" },
+      onComplete: () => {
       setHistory((items) => [...items, { cards }]);
       setCards(next);
       setSelectedCards([merged.id]);
       setSelectedOp(null);
       setMergeAnimation(null);
       void completeIfSolved(next);
-    }, 220);
+      }
+    });
+    if (fromEl) {
+      tl.to(fromEl, { x: dx, y: dy, scale: 0.2, autoAlpha: 0 }, 0);
+    }
+    if (toEl) {
+      tl.to(toEl, { scale: 1.08, duration: 0.12, ease: "back.out(2)" }, 0.08).to(toEl, { scale: 1, duration: 0.12 }, ">");
+    }
   };
 
   const resolveCard = (card?: CardState): CardState | undefined => {
@@ -447,7 +483,7 @@ function Game({
   };
 
   return (
-    <main className="screen game">
+    <main ref={gameRef} className="screen game">
       <header className="topbar">
         <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
         <div>
@@ -587,10 +623,14 @@ function ResultPanel({
   onNextRace: () => void;
   onNextPuzzle: () => void;
 }) {
+  const resultRef = useRef<HTMLElement | null>(null);
+  useGSAP(() => {
+    gsap.fromTo(".result", { y: 16, scale: 0.96, autoAlpha: 0 }, { y: 0, scale: 1, autoAlpha: 1, duration: 0.28, ease: "back.out(1.7)" });
+  }, { scope: resultRef });
   const shareText = `我用 ${(elapsed / 1000).toFixed(1)} 秒解开了这道 24 点：${solution.expression} = 24。Seed：${seed}`;
   const copyShare = async () => navigator.clipboard?.writeText(shareText);
   return (
-    <section className="result-overlay">
+    <section ref={resultRef} className="result-overlay">
       <div className="result">
       <div className="result-title">
         <Medal />
