@@ -247,6 +247,70 @@ export const labPuzzles: Puzzle[] = [
   makeLabPuzzle(8, "拼接深水", [2, 4, 1, 8], ruleSets.concat, "concat", 62, ["数字拼接", "反向构造"])
 ];
 
+export type LabCollection = {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  accent: string;
+  reward: string;
+  unlockHint: string;
+  puzzles: Puzzle[];
+};
+
+export const labCollections: LabCollection[] = [
+  {
+    id: "poison",
+    title: "毒苹果残局",
+    subtitle: "5选4 / 6选4",
+    description: "先找出真正能成 24 的 4 张牌，再处理干扰项带来的认知压力。",
+    accent: "#17b98d",
+    reward: "高金币",
+    unlockHint: "主线研究生阶段后自然出现。",
+    puzzles: labPuzzles.filter((puzzle) => puzzle.variant === "poison")
+  },
+  {
+    id: "grand",
+    title: "大满贯挑战",
+    subtitle: "5卡 / 6卡全用",
+    description: "所有牌都必须消耗，核心技巧是把多余数字抵消成 0 或 1。",
+    accent: "#2364ff",
+    reward: "智慧星加成",
+    unlockHint: "适合已经熟悉分数和抵消策略的玩家。",
+    puzzles: labPuzzles.filter((puzzle) => puzzle.variant === "grand")
+  },
+  {
+    id: "concat",
+    title: "拼接实验",
+    subtitle: "打破次元壁",
+    description: "允许把两张牌拼成多位数，改变传统四则运算的破局路径。",
+    accent: "#ff6b1a",
+    reward: "稀有解法",
+    unlockHint: "后续可作为极品道具或伟人关卡能力。",
+    puzzles: labPuzzles.filter((puzzle) => puzzle.variant === "concat")
+  },
+  {
+    id: "special",
+    title: "特殊牌实验",
+    subtitle: "冰冻 / 幻影 / 小丑",
+    description: "预留给冰冻牌、幻影牌、小丑牌等 Roguelike 机制。",
+    accent: "#9b1d2d",
+    reward: "深渊印记",
+    unlockHint: "地狱模式开放后解锁。",
+    puzzles: []
+  },
+  {
+    id: "advanced-math",
+    title: "高阶符号实验",
+    subtitle: "平方 / 开方 / 阶乘",
+    description: "预留给进阶数学符号，适合后期高玩挑战和特殊赛季。",
+    accent: "#5b45d9",
+    reward: "教授徽章",
+    unlockHint: "数学之神阶段后解锁。",
+    puzzles: []
+  }
+];
+
 export const allPuzzles: Puzzle[] = [...puzzles, ...labPuzzles];
 
 export const getPuzzleById = (id: string): Puzzle | undefined => allPuzzles.find((puzzle) => puzzle.id === id);

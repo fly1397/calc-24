@@ -1,5 +1,6 @@
 import type { CoachMessage, HintPack, PlayerMetrics, Puzzle, StoredAttempt } from "../shared/types";
-import type { StageDefinition } from "../shared/puzzles";
+import type { LabCollection, StageDefinition } from "../shared/puzzles";
+import type { GeneratePuzzleConfig, GeneratedPuzzleResult } from "../shared/generator";
 
 export type PuzzlePayload = {
   puzzle: Puzzle;
@@ -24,7 +25,12 @@ const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
 export const api = {
   puzzles: () => request<{ puzzles: Puzzle[] }>("/api/puzzles"),
   puzzleIndex: () => request<{ puzzles: Puzzle[]; stages: StageDefinition[] }>("/api/puzzles"),
-  lab: () => request<{ puzzles: Puzzle[] }>("/api/lab"),
+  lab: () => request<{ collections: LabCollection[]; puzzles: Puzzle[] }>("/api/lab"),
+  generate: (body: GeneratePuzzleConfig) =>
+    request<GeneratedPuzzleResult>("/api/generate", {
+      method: "POST",
+      body: JSON.stringify(body)
+    }),
   puzzle: (id: string) => request<PuzzlePayload>(`/api/puzzles/${id}`),
   daily: () => request<PuzzlePayload>("/api/daily"),
   seed: (seed: string) => request<PuzzlePayload>(`/api/seed/${encodeURIComponent(seed)}`),

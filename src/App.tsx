@@ -17,7 +17,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
 import { formatFraction } from "../shared/fraction";
-import type { StageDefinition } from "../shared/puzzles";
+import type { LabCollection, StageDefinition } from "../shared/puzzles";
 import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
 
@@ -54,6 +54,28 @@ const useClock = (running: boolean, startedAt: number | null) => {
   }, [running]);
   return startedAt ? now - startedAt : 0;
 };
+
+function BottomNav({ active, onNavigate }: { active: View; onNavigate: (view: View) => void }) {
+  const tabs: Array<{ id: View; label: string; icon: typeof Play }> = [
+    { id: "home", label: "首页", icon: Play },
+    { id: "lab", label: "实验室", icon: FlaskConical },
+    { id: "supply", label: "补给站", icon: Sparkles },
+    { id: "archive", label: "档案馆", icon: Archive }
+  ];
+  return (
+    <nav className="bottom-nav">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button key={tab.id} className={active === tab.id ? "active" : ""} onClick={() => onNavigate(tab.id)}>
+            <Icon size={19} />
+            <span>{tab.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 function Home({
   onNavigate,
@@ -126,6 +148,7 @@ function Home({
         <div><strong>{stats?.discoveredSolutions ?? 0}</strong><span>解法</span></div>
         <div><strong>{stats?.attempts ?? 0}</strong><span>记录</span></div>
       </section>
+      <BottomNav active="home" onNavigate={onNavigate} />
     </main>
   );
 }
@@ -483,7 +506,19 @@ function Clinic({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () => 
   );
 }
 
-function ArchiveView({ puzzles, stats, onBack, onPick }: { puzzles: Puzzle[]; stats?: Stats; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
+function ArchiveView({
+  puzzles,
+  stats,
+  onBack,
+  onPick,
+  onNavigate
+}: {
+  puzzles: Puzzle[];
+  stats?: Stats;
+  onBack: () => void;
+  onPick: (puzzle: Puzzle) => void;
+  onNavigate: (view: View) => void;
+}) {
   const archive = new Map((stats?.archive ?? []).map((item) => [item.puzzleId, item.discovered]));
   const active = puzzles.filter((puzzle) => archive.has(puzzle.id)).slice(0, 60);
   return (
@@ -506,25 +541,67 @@ function ArchiveView({ puzzles, stats, onBack, onPick }: { puzzles: Puzzle[]; st
           ))}
         </section>
       )}
+      <BottomNav active="archive" onNavigate={onNavigate} />
     </main>
   );
 }
 
-function LabView({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
+function LabView({
+  collections,
+  onBack,
+  onPick,
+  onNavigate
+}: {
+  collections: LabCollection[];
+  onBack: () => void;
+  onPick: (puzzle: Puzzle) => void;
+  onNavigate: (view: View) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = collections.find((collection) => collection.id === selectedId);
+  if (selected) {
+    return (
+      <main className="screen">
+        <header className="topbar">
+          <button className="icon-button ghost" onClick={() => setSelectedId(null)} aria-label="返回"><ArrowLeft /></button>
+          <div><p className="eyebrow">异构实验室</p><h2>{selected.title}</h2></div>
+        </header>
+        <section className="lab-brief" style={{ borderColor: selected.accent }}>
+          <strong>{selected.subtitle}</strong>
+          <span>{selected.description}</span>
+          <em>奖励：{selected.reward}</em>
+        </section>
+        {selected.puzzles.length === 0 ? <p className="empty">{selected.unlockHint}</p> : (
+          <section className="clinic-list">
+            {selected.puzzles.map((puzzle) => (
+              <button key={puzzle.id} onClick={() => onPick(puzzle)}>
+                <strong>{puzzle.title}</strong>
+                <span>{puzzle.cards.join("  ")} · DS {puzzle.ds} · {puzzle.ruleSet.description}</span>
+              </button>
+            ))}
+          </section>
+        )}
+        <BottomNav active="lab" onNavigate={onNavigate} />
+      </main>
+    );
+  }
   return (
     <main className="screen">
       <header className="topbar">
         <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
         <div><p className="eyebrow">异构实验室</p><h2>规则挑战</h2></div>
       </header>
-      <section className="clinic-list">
-        {puzzles.map((puzzle) => (
-          <button key={puzzle.id} onClick={() => onPick(puzzle)}>
-            <strong>{puzzle.ruleSet.name}</strong>
-            <span>{puzzle.stage} · {puzzle.cards.join("  ")} · {puzzle.ruleSet.description}</span>
+      <section className="lab-grid">
+        {collections.map((collection) => (
+          <button key={collection.id} onClick={() => setSelectedId(collection.id)} style={{ borderColor: collection.accent }}>
+            <strong>{collection.title}</strong>
+            <span>{collection.subtitle}</span>
+            <small>{collection.description}</small>
+            <em>{collection.puzzles.length ? `${collection.puzzles.length} 个挑战` : collection.unlockHint}</em>
           </button>
         ))}
       </section>
+      <BottomNav active="lab" onNavigate={onNavigate} />
     </main>
   );
 }
@@ -533,12 +610,14 @@ function SupplyView({
   wallet,
   inventory,
   onBack,
-  onChange
+  onChange,
+  onNavigate
 }: {
   wallet: typeof defaultWallet;
   inventory: typeof defaultInventory;
   onBack: () => void;
   onChange: (wallet: typeof defaultWallet, inventory: typeof defaultInventory) => void;
+  onNavigate: (view: View) => void;
 }) {
   const buy = (price: number, patch: Partial<typeof defaultInventory>) => {
     if (wallet.coins < price) return;
@@ -607,6 +686,7 @@ function SupplyView({
         </div>
         <button onClick={draw} disabled={wallet.wisdomStars < 5}>抽 1 次</button>
       </section>
+      <BottomNav active="supply" onNavigate={onNavigate} />
     </main>
   );
 }
@@ -615,6 +695,7 @@ export function App() {
   const [view, setView] = useState<View>("home");
   const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
   const [labPuzzles, setLabPuzzles] = useState<Puzzle[]>([]);
+  const [labCollections, setLabCollections] = useState<LabCollection[]>([]);
   const [stages, setStages] = useState<StageDefinition[]>([]);
   const [payload, setPayload] = useState<PuzzlePayload | null>(null);
   const [mode, setMode] = useState<Mode>("main");
@@ -630,7 +711,10 @@ export function App() {
       setPuzzles(data.puzzles);
       setStages(data.stages);
     });
-    api.lab().then((data) => setLabPuzzles(data.puzzles));
+    api.lab().then((data) => {
+      setLabPuzzles(data.puzzles);
+      setLabCollections(data.collections);
+    });
     api.stats().then(setStats).catch(() => undefined);
   }, []);
 
@@ -699,14 +783,15 @@ export function App() {
   if (view === "game" && currentGame) return currentGame;
   if (view === "map") return <LevelMap puzzles={puzzles} stages={stages} solved={solved} onBack={() => setView("home")} onPick={startPuzzle} />;
   if (view === "clinic") return <Clinic puzzles={puzzles} onBack={() => setView("home")} onPick={startPuzzle} />;
-  if (view === "archive") return <ArchiveView puzzles={[...puzzles, ...labPuzzles]} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} />;
-  if (view === "lab") return <LabView puzzles={labPuzzles} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} />;
+  if (view === "archive") return <ArchiveView puzzles={[...puzzles, ...labPuzzles]} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} onNavigate={setView} />;
+  if (view === "lab") return <LabView collections={labCollections} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} onNavigate={setView} />;
   if (view === "supply") {
     return (
       <SupplyView
         wallet={wallet}
         inventory={inventory}
         onBack={() => setView("home")}
+        onNavigate={setView}
         onChange={(nextWallet, nextInventory) => {
           setWallet(nextWallet);
           setInventory(nextInventory);

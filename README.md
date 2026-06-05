@@ -17,6 +17,8 @@
 - 智能训练：根据最近用时、提示、重置、连胜/卡题情况动态推荐难度。
 - AI 导师：基于局内状态、难度和规则给出实时策略文案。
 - 异构实验室：集中挑战禁用除法、乘法收官、除法收官、整数路线、不许负数等规则关。
+- 异构实验室玩法集合：毒苹果残局、大满贯挑战、拼接实验、特殊牌实验、高阶符号实验。
+- 动态出题引擎：支持按目标值、牌数、使用牌数、数字范围、运算符、DS 难度、解法数量、标签和 Seed 生成题目。
 - 解法档案：展示每题已发现解法数量和图鉴进度。
 - 轻量排行榜：按题目读取本地提交记录。
 - 后端静态托管：`npm run build && npm start` 可用 Express 提供前端与 API。
@@ -70,6 +72,7 @@ data/      运行后生成的本地数据
 - `GET /api/seed/:seed`
 - `POST /api/training/next`
 - `POST /api/coach`
+- `POST /api/generate`
 - `POST /api/attempts`
 - `GET /api/attempts/:puzzleId`
 - `GET /api/leaderboard/:puzzleId`

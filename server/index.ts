@@ -1,6 +1,7 @@
 import express from "express";
 import path from "node:path";
-import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, labPuzzles, puzzles, stages } from "../shared/puzzles";
+import { generatePuzzle } from "../shared/generator";
+import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, labCollections, labPuzzles, puzzles, stages } from "../shared/puzzles";
 import { coachForState, makeHints, recommendDifficulty, scoreAttempt } from "../shared/engine";
 import { addAttempt, attemptsForPuzzle, readStore } from "./store";
 import type { PlayerMetrics, StoredAttempt } from "../shared/types";
@@ -20,7 +21,15 @@ app.get("/api/puzzles", (_req, res) => {
 });
 
 app.get("/api/lab", (_req, res) => {
-  res.json({ puzzles: labPuzzles });
+  res.json({ collections: labCollections, puzzles: labPuzzles });
+});
+
+app.post("/api/generate", (req, res) => {
+  try {
+    res.json(generatePuzzle(req.body));
+  } catch (error) {
+    res.status(404).json({ error: error instanceof Error ? error.message : "Generation failed" });
+  }
 });
 
 app.get("/api/puzzles/:id", (req, res) => {
