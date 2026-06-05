@@ -324,11 +324,11 @@ function Game({
     const merged = mergeCards(left, right, op, puzzle.ruleSet);
     if (!merged) return;
     const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
-    const fromRect = cardRefs.current[rightId]?.getBoundingClientRect();
-    const toRect = cardRefs.current[leftId]?.getBoundingClientRect();
+    const fromRect = cardRefs.current[leftId]?.getBoundingClientRect();
+    const toRect = cardRefs.current[rightId]?.getBoundingClientRect();
     const dx = fromRect && toRect ? toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2) : -80;
     const dy = fromRect && toRect ? toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2) : -24;
-    setMergeAnimation({ fromId: rightId, toId: leftId, dx, dy });
+    setMergeAnimation({ fromId: leftId, toId: rightId, dx, dy });
     window.setTimeout(() => {
       setHistory((items) => [...items, { cards }]);
       setCards(next);
@@ -603,24 +603,11 @@ function ResultPanel({
         {solution.tags.map((tag) => <span key={tag}>{tag}</span>)}
         {hintsUsed === 0 && <span>无提示</span>}
       </div>
-      <div className="score-row">
-        <div><strong>{result?.score ?? 0}</strong><span>得分</span></div>
-        <div><strong>{result?.discoveredCount ?? 1}</strong><span>已发现解法</span></div>
-      </div>
-      <ol className="steps">{solution.steps.map((step) => <li key={step}>{step}</li>)}</ol>
       <div className="result-actions">
         <button onClick={mode === "training" ? onNextTraining : mode === "race" ? onNextRace : onNextPuzzle}><Play size={18} />下一关</button>
-        <button onClick={onReset}><Sparkles size={18} />再找一种</button>
-        <button onClick={copyShare}><Share2 size={18} />复制挑战</button>
+        <button onClick={onReset}><Sparkles size={18} />再来一次</button>
       </div>
-      {leaderboard.length > 0 && (
-        <div className="leaderboard">
-          <p>本题最快记录</p>
-          {leaderboard.slice(0, 3).map((row, index) => (
-            <span key={`${row.createdAt}-${row.solutionKey}`}>{index + 1}. {(row.elapsedMs / 1000).toFixed(1)}s · {row.hintsUsed ? `${row.hintsUsed} 线索` : "无提示"}</span>
-          ))}
-        </div>
-      )}
+      <button className="text-action" onClick={copyShare}><Share2 size={16} />复制挑战</button>
       </div>
     </section>
   );
