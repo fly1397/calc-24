@@ -77,14 +77,28 @@ button:disabled {
 .home {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
+}
+
+.home-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  color: #4d655c;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.home-top .icon-button {
+  width: 44px;
+  height: 44px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding-top: 18px;
 }
 
 .brand-mark {
@@ -115,7 +129,7 @@ h2 {
 
 h1 {
   max-width: 260px;
-  font-size: 34px;
+  font-size: 32px;
   line-height: 1.08;
 }
 
@@ -132,7 +146,7 @@ h2 span {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 112px;
+  min-height: 104px;
   padding: 20px;
   border-radius: 8px;
   background: #1e2b3a;
@@ -166,7 +180,7 @@ h2 span {
 .mode-tile {
   display: grid;
   gap: 8px;
-  min-height: 118px;
+  min-height: 112px;
   padding: 16px;
   border: 1px solid #dfece7;
   border-radius: 8px;
@@ -201,6 +215,23 @@ h2 span {
 
 .mode-tile.danger span {
   color: #ffb2b8;
+}
+
+.home-quick {
+  display: grid;
+}
+
+.home-quick button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border-radius: 8px;
+  background: #eef5f2;
+  color: #42564f;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .primary-action,
@@ -239,7 +270,7 @@ h2 span {
 
 .stats div,
 .score-row div {
-  min-height: 82px;
+  min-height: 76px;
   padding: 14px;
   border: 1px solid #e0ece7;
   border-radius: 8px;
@@ -379,7 +410,8 @@ h2 span {
 .game {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
 }
 
 .timer {
@@ -391,6 +423,10 @@ h2 span {
   font-weight: 900;
 }
 
+.game-hud {
+  min-height: 56px;
+}
+
 .puzzle-info {
   display: flex;
   gap: 8px;
@@ -399,7 +435,7 @@ h2 span {
 }
 
 .selection-guide {
-  min-height: 34px;
+  min-height: 32px;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -425,8 +461,9 @@ h2 span {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-content: center;
-  height: clamp(300px, 46vh, 390px);
+  height: clamp(292px, 44vh, 382px);
   overflow: hidden;
+  contain: layout paint;
 }
 
 .number-card {
