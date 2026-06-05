@@ -229,6 +229,7 @@ function Game({
   onSolved,
   onNextTraining,
   onNextRace,
+  onNextPuzzle,
   raceProgress,
   debug
 }: {
@@ -239,6 +240,7 @@ function Game({
   onSolved: (puzzleId: string, elapsedMs: number, hintsUsed: number, resets: number) => void;
   onNextTraining: () => void;
   onNextRace: () => void;
+  onNextPuzzle: () => void;
   raceProgress?: string;
   debug: typeof defaultDebug;
 }) {
@@ -249,6 +251,7 @@ function Game({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [selectedOp, setSelectedOp] = useState<Operator | null>(null);
+  const [mergingIds, setMergingIds] = useState<string[]>([]);
   const [startedAt, setStartedAt] = useState<number | null>(Date.now());
   const [hintsUsed, setHintsUsed] = useState(0);
   const [unaryUsed, setUnaryUsed] = useState(0);
@@ -267,6 +270,7 @@ function Game({
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
+    setMergingIds([]);
     setStartedAt(Date.now());
     setHintsUsed(0);
     setUnaryUsed(0);
@@ -318,11 +322,15 @@ function Game({
     const merged = mergeCards(left, right, op, puzzle.ruleSet);
     if (!merged) return;
     const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
-    setHistory((items) => [...items, { cards }]);
-    setCards(next);
-    setSelectedCards([merged.id]);
-    setSelectedOp(null);
-    void completeIfSolved(next);
+    setMergingIds([leftId, rightId]);
+    window.setTimeout(() => {
+      setHistory((items) => [...items, { cards }]);
+      setCards(next);
+      setSelectedCards([merged.id]);
+      setSelectedOp(null);
+      setMergingIds([]);
+      void completeIfSolved(next);
+    }, 220);
   };
 
   const resolveCard = (card?: CardState): CardState | undefined => {
@@ -396,6 +404,7 @@ function Game({
     setHistory(history.slice(0, -1));
     setSelectedCards([]);
     setSelectedOp(null);
+    setMergingIds([]);
   };
 
   const reset = () => {
@@ -405,6 +414,7 @@ function Game({
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
+    setMergingIds([]);
     setSolution(null);
     setResult(null);
     setStartedAt(Date.now());
@@ -447,6 +457,12 @@ function Game({
         <span>DS {puzzle.ds}</span>
         <span>{solutionCount} 种参考解</span>
       </section>
+      <section className="selection-guide">
+        {selectedCards.length === 0 && "先点一张数字牌"}
+        {selectedCards.length === 1 && !selectedOp && "再点运算符，或再选一张牌"}
+        {selectedCards.length === 1 && selectedOp && `已选择 ${opText[selectedOp]}，再点第二张牌`}
+        {selectedCards.length === 2 && "选择运算符完成合并"}
+      </section>
       {puzzle.specialCards?.length ? (
         <section className="rule-note">
           {puzzle.specialCards.map((card) => (
@@ -463,7 +479,7 @@ function Game({
 
       <section className="card-board">
         {cards.map((card) => (
-          <button key={card.id} className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""}`} onClick={() => pickCard(card.id)}>
+          <button key={card.id} className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""} ${mergingIds.includes(card.id) ? "merging" : ""}`} onClick={() => pickCard(card.id)}>
             <span>{formatFraction(resolveCard(card)?.value ?? card.value)}</span>
             {card.special && <small>{card.special.type === "frost" ? "冰" : card.special.type === "ghost" ? "幻" : "J"}</small>}
           </button>
@@ -520,6 +536,7 @@ function Game({
           onReset={reset}
           onNextTraining={onNextTraining}
           onNextRace={onNextRace}
+          onNextPuzzle={onNextPuzzle}
         />
       )}
     </main>
@@ -541,7 +558,8 @@ function ResultPanel({
   mode,
   onReset,
   onNextTraining,
-  onNextRace
+  onNextRace,
+  onNextPuzzle
 }: {
   solution: Solution;
   result: { isNew: boolean; score: number; discoveredCount: number } | null;
@@ -553,15 +571,17 @@ function ResultPanel({
   onReset: () => void;
   onNextTraining: () => void;
   onNextRace: () => void;
+  onNextPuzzle: () => void;
 }) {
   const shareText = `我用 ${(elapsed / 1000).toFixed(1)} 秒解开了这道 24 点：${solution.expression} = 24。Seed：${seed}`;
   const copyShare = async () => navigator.clipboard?.writeText(shareText);
   return (
-    <section className="result">
+    <section className="result-overlay">
+      <div className="result">
       <div className="result-title">
         <Medal />
         <div>
-          <p>{result?.isNew ? "发现新解法" : "通关成功"}</p>
+          <p>{result?.isNew ? "发现新解法" : "恭喜通关"}</p>
           <strong>{solution.expression} = 24</strong>
         </div>
       </div>
@@ -575,10 +595,9 @@ function ResultPanel({
       </div>
       <ol className="steps">{solution.steps.map((step) => <li key={step}>{step}</li>)}</ol>
       <div className="result-actions">
+        <button onClick={mode === "training" ? onNextTraining : mode === "race" ? onNextRace : onNextPuzzle}><Play size={18} />下一关</button>
         <button onClick={onReset}><Sparkles size={18} />再找一种</button>
         <button onClick={copyShare}><Share2 size={18} />复制挑战</button>
-        {mode === "training" && <button onClick={onNextTraining}><Brain size={18} />下一题</button>}
-        {mode === "race" && <button onClick={onNextRace}><Timer size={18} />下一题</button>}
       </div>
       {leaderboard.length > 0 && (
         <div className="leaderboard">
@@ -588,6 +607,7 @@ function ResultPanel({
           ))}
         </div>
       )}
+      </div>
     </section>
   );
 }
@@ -953,6 +973,24 @@ export function App() {
     setView("game");
   };
 
+  const startNextPuzzle = async () => {
+    if (!payload) return;
+    const current = payload.puzzle;
+    const pools = [
+      puzzles,
+      labCollections.find((collection) => collection.puzzles.some((puzzle) => puzzle.id === current.id))?.puzzles ?? [],
+      hellLayers.find((layer) => layer.puzzles.some((puzzle) => puzzle.id === current.id))?.puzzles ?? []
+    ];
+    const pool = pools.find((items) => items.some((item) => item.id === current.id)) ?? [];
+    const index = pool.findIndex((item) => item.id === current.id);
+    const next = pool[index + 1];
+    if (!next) {
+      setView("home");
+      return;
+    }
+    await startPuzzle(next, mode === "hell" ? "hell" : mode === "lab" ? "lab" : "main");
+  };
+
   const nextRace = async () => {
     const nextIndex = raceIndex + 1;
     setRaceIndex(nextIndex);
@@ -1002,6 +1040,7 @@ export function App() {
         onSolved={markSolved}
         onNextTraining={startTraining}
         onNextRace={nextRace}
+        onNextPuzzle={startNextPuzzle}
       />
     );
   }, [payload, mode, recommendation, solved, metrics, wallet, debug, raceIndex, racePack]);

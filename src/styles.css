@@ -398,6 +398,17 @@ h2 span {
   padding-bottom: 2px;
 }
 
+.selection-guide {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf4ef;
+  color: #48645a;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .puzzle-info span,
 .tag-row span {
   flex: 0 0 auto;
@@ -485,6 +496,26 @@ h2 span {
   background: #10d7b1;
   box-shadow: 0 16px 30px rgba(16, 215, 177, 0.24);
   transform: translateY(-2px);
+}
+
+.number-card.merging {
+  animation: cardMerge 220ms ease-in-out forwards;
+  pointer-events: none;
+}
+
+@keyframes cardMerge {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(0.88);
+    opacity: 0.72;
+  }
+  100% {
+    transform: scale(0.18);
+    opacity: 0;
+  }
 }
 
 .ops {
@@ -601,13 +632,36 @@ h2 span {
   width: 100%;
 }
 
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-items: end;
+  width: min(100%, 480px);
+  margin: 0 auto;
+  background: rgba(12, 18, 16, 0.34);
+  animation: fadeIn 160ms ease;
+}
+
 .result {
   display: grid;
   gap: 14px;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 8px 8px 0 0;
   background: #fff;
   box-shadow: 0 -10px 30px rgba(35, 52, 45, 0.08);
+  animation: resultUp 180ms ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes resultUp {
+  from { transform: translateY(24px); }
+  to { transform: translateY(0); }
 }
 
 .result-title {
