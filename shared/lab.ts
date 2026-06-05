@@ -1,7 +1,7 @@
 import { solvePuzzle } from "./engine";
 import { scoreDifficulty } from "./generator";
 import { puzzles, ruleSets } from "./puzzles";
-import type { Puzzle } from "./types";
+import type { Puzzle, SpecialCardSpec } from "./types";
 
 export type LabCollectionDefinition = {
   id: string;
@@ -93,7 +93,7 @@ const pickBase = (weekSeed: string, collectionId: string, level: number): Puzzle
   return sorted.sort((a, b) => Math.abs(a.ds - targetDs) - Math.abs(b.ds - targetDs))[0];
 };
 
-const makeRuntimePuzzle = (base: Puzzle, collectionId: string, level: number, weekSeed: string, cards: number[], ruleSet: Puzzle["ruleSet"], variant: Puzzle["variant"], title: string): Puzzle => {
+const makeRuntimePuzzle = (base: Puzzle, collectionId: string, level: number, weekSeed: string, cards: number[], ruleSet: Puzzle["ruleSet"], variant: Puzzle["variant"], title: string, specialCards: SpecialCardSpec[] = []): Puzzle => {
   const solutions = solvePuzzle(cards, 24, 30, ruleSet);
   const fallback = solutions.length > 0 ? undefined : puzzles.find((candidate) => solvePuzzle(candidate.cards, 24, 2, ruleSet).length > 0);
   const finalCards = fallback?.cards ?? cards;
@@ -116,7 +116,8 @@ const makeRuntimePuzzle = (base: Puzzle, collectionId: string, level: number, we
     boss: level === 20,
     variant,
     ruleSet,
-    solutionCount: Math.max(1, finalSolutions.length)
+    solutionCount: Math.max(1, finalSolutions.length),
+    specialCards
   };
 };
 
@@ -164,8 +165,20 @@ export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date()
       return makeRuntimePuzzle(base, collectionId, level, weekSeed, [...base.cards, ...extra], hard ? ruleSets.grand6 : ruleSets.grand5, "grand", `${definition.title} ${level}`);
     }
     if (collectionId === "special") {
-      const ruleSet = level % 2 === 0 ? ruleSets.noNegative : ruleSets.mustDivide;
-      return makeRuntimePuzzle(base, collectionId, level, weekSeed, base.cards, ruleSet, "hell", `${definition.title} ${level}`);
+      const type = level % 3 === 0 ? "joker" : level % 3 === 1 ? "frost" : "ghost";
+      const specialCards: SpecialCardSpec[] = [{ index: level % 4, type, altValue: ((level * 7) % 9) + 1 }];
+      return makeRuntimePuzzle(base, collectionId, level, weekSeed, base.cards, ruleSets.specialCards, "hell", `${definition.title} ${level}`, specialCards);
+    }
+    if (collectionId === "advanced-math") {
+      const templates = [
+        [5, 5, 1, 1],
+        [4, 4, 4, 4],
+        [3, 4, 5, 6],
+        [2, 3, 4, 4],
+        [6, 4, 2, 1]
+      ];
+      const cards = templates[level % templates.length];
+      return makeRuntimePuzzle(base, collectionId, level, weekSeed, cards, ruleSets.advancedMath, "hell", `${definition.title} ${level}`);
     }
     const pool = concatPool();
     const cards = pool[hash(`${weekSeed}-${level}`) % pool.length];

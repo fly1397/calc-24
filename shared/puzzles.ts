@@ -93,6 +93,23 @@ export const ruleSets: Record<string, RuleSet> = {
     description: "6 张牌必须全部用完，依靠抵消策略得到 24。",
     cardCount: 6,
     useCount: 6
+  },
+  specialCards: {
+    ...standardRuleSet,
+    id: "special-cards",
+    name: "特殊卡牌",
+    description: "包含冰冻牌、幻影牌或小丑牌。",
+    cardCount: 4,
+    useCount: 4
+  },
+  advancedMath: {
+    ...standardRuleSet,
+    id: "advanced-math",
+    name: "高阶符号",
+    description: "允许使用平方、开方、阶乘等一元运算。",
+    unaryOperators: ["square", "sqrt", "factorial"],
+    cardCount: 4,
+    useCount: 4
   }
 };
 

@@ -1,10 +1,19 @@
 export type Operator = "+" | "-" | "*" | "/" | "concat";
+export type UnaryOperator = "square" | "sqrt" | "factorial";
+export type SpecialCardType = "frost" | "ghost" | "joker";
+
+export type SpecialCardSpec = {
+  index: number;
+  type: SpecialCardType;
+  altValue?: number;
+};
 
 export type RuleSet = {
   id: string;
   name: string;
   description: string;
   operators: Operator[];
+  unaryOperators?: UnaryOperator[];
   allowNegative: boolean;
   allowFraction: boolean;
   allowConcat?: boolean;
@@ -12,6 +21,7 @@ export type RuleSet = {
   useCount: number;
   requiredOperator?: Operator;
   finalOperator?: Operator;
+  specialCards?: SpecialCardSpec[];
 };
 
 export type Fraction = {
@@ -38,6 +48,7 @@ export type CardState = {
   id: string;
   value: Fraction;
   expr: ExprNode;
+  special?: SpecialCardSpec;
 };
 
 export type Puzzle = {
@@ -56,6 +67,7 @@ export type Puzzle = {
   variant: "standard" | "poison" | "grand" | "concat" | "hell";
   ruleSet: RuleSet;
   solutionCount: number;
+  specialCards?: SpecialCardSpec[];
 };
 
 export type Wallet = {

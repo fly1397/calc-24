@@ -1,5 +1,5 @@
 import { equalsFraction, formatFraction, makeFraction, operate } from "./fraction";
-import type { CardState, CoachMessage, ExprNode, HintPack, Operator, PlayerMetrics, Puzzle, RuleSet, Solution } from "./types";
+import type { CardState, CoachMessage, ExprNode, HintPack, Operator, PlayerMetrics, Puzzle, RuleSet, Solution, SpecialCardSpec, UnaryOperator } from "./types";
 
 const operators: Operator[] = ["+", "-", "*", "/"];
 const allOperators: Operator[] = ["+", "-", "*", "/", "concat"];
@@ -15,12 +15,12 @@ export const standardRuleSet: RuleSet = {
 };
 const target24 = makeFraction(24);
 
-export const makeInitialCards = (numbers: number[]): CardState[] =>
+export const makeInitialCards = (numbers: number[], specials: SpecialCardSpec[] = []): CardState[] =>
   numbers.map((number, index) => {
     const value = makeFraction(number);
     const id = `c${index}-${number}`;
     const expr: ExprNode = { type: "leaf", value, cardId: id, label: String(number) };
-    return { id, value, expr };
+    return { id, value, expr, special: specials.find((special) => special.index === index) };
   });
 
 const opLabel = (op: Operator): string => (op === "*" ? "×" : op === "/" ? "÷" : op === "concat" ? "拼" : op);
@@ -103,6 +103,37 @@ export const mergeCards = (left: CardState, right: CardState, op: Operator, rule
       left: left.expr,
       right: right.expr
     }
+  };
+};
+
+const factorial = (value: number): number | null => {
+  if (!Number.isInteger(value) || value < 0 || value > 6) return null;
+  let result = 1;
+  for (let index = 2; index <= value; index += 1) result *= index;
+  return result;
+};
+
+export const applyUnaryCard = (card: CardState, op: UnaryOperator, ruleSet: RuleSet = standardRuleSet): CardState | null => {
+  if (!ruleSet.unaryOperators?.includes(op)) return null;
+  const numeric = card.value.n / card.value.d;
+  const next =
+    op === "square"
+      ? makeFraction(card.value.n * card.value.n, card.value.d * card.value.d)
+      : op === "sqrt"
+        ? Number.isInteger(numeric) && Math.sqrt(numeric) % 1 === 0
+          ? makeFraction(Math.sqrt(numeric))
+          : null
+        : factorial(numeric) === null
+          ? null
+          : makeFraction(factorial(numeric)!);
+  if (!next) return null;
+  if (!ruleSet.allowNegative && next.n < 0) return null;
+  if (!ruleSet.allowFraction && next.d !== 1) return null;
+  const label = op === "square" ? `${expressionToString(card.expr)}²` : op === "sqrt" ? `√${expressionToString(card.expr)}` : `${expressionToString(card.expr)}!`;
+  return {
+    id: `${card.id}-${op}`,
+    value: next,
+    expr: { type: "leaf", value: next, cardId: `${card.id}-${op}`, label }
   };
 };
 

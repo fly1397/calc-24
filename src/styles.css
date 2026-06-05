@@ -418,6 +418,7 @@ h2 span {
 }
 
 .number-card {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 1;
@@ -427,6 +428,21 @@ h2 span {
   font-size: clamp(34px, 15vw, 78px);
   font-weight: 900;
   transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.number-card small {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #17202f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
 }
 
 .card-board:has(.number-card:nth-child(5)) {
@@ -493,6 +509,16 @@ h2 span {
   color: #b4bfba;
 }
 
+.unary-ops {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.unary-ops .op-button {
+  aspect-ratio: auto;
+  min-height: 50px;
+  font-size: 22px;
+}
+
 .op-button.active {
   background: #ff6b1a;
   color: #fff;
@@ -500,7 +526,7 @@ h2 span {
 
 .tools {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
   gap: 10px;
 }
 

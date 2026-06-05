@@ -17,12 +17,12 @@ import {
   Undo2
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
-import { formatFraction } from "../shared/fraction";
+import { applyUnaryCard, makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
+import { formatFraction, makeFraction } from "../shared/fraction";
 import type { LabCollectionRuntime } from "../shared/lab";
 import type { HellLayer } from "../shared/modes";
 import type { StageDefinition } from "../shared/puzzles";
-import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
+import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt, UnaryOperator } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
 
 type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply" | "hell" | "settings";
@@ -31,6 +31,7 @@ type HistoryItem = { cards: CardState[] };
 type Stats = { attempts: number; solvedPuzzles: number; discoveredSolutions: number; archive: Array<{ puzzleId: string; discovered: number }> };
 
 const opText: Record<Operator, string> = { "+": "+", "-": "-", "*": "×", "/": "÷", concat: "拼" };
+const unaryText: Record<UnaryOperator, string> = { square: "x²", sqrt: "√x", factorial: "x!" };
 
 const saveLocal = (key: string, value: unknown) => localStorage.setItem(key, JSON.stringify(value));
 const loadLocal = <T,>(key: string, fallback: T): T => {
@@ -242,7 +243,7 @@ function Game({
   debug: typeof defaultDebug;
 }) {
   const { puzzle, hints, solutionCount } = payload;
-  const initialCards = useMemo(() => makeInitialCards(puzzle.cards), [puzzle.cards]);
+  const initialCards = useMemo(() => makeInitialCards(puzzle.cards, puzzle.specialCards), [puzzle.cards, puzzle.specialCards]);
   const [cards, setCards] = useState<CardState[]>(() => initialCards.slice(0, puzzle.ruleSet.useCount));
   const [reserveCards, setReserveCards] = useState<CardState[]>(() => initialCards.slice(puzzle.ruleSet.useCount));
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -258,7 +259,7 @@ function Game({
   const elapsed = useClock(!solution, startedAt);
 
   useEffect(() => {
-    const nextInitial = makeInitialCards(puzzle.cards);
+    const nextInitial = makeInitialCards(puzzle.cards, puzzle.specialCards);
     setCards(nextInitial.slice(0, puzzle.ruleSet.useCount));
     setReserveCards(nextInitial.slice(puzzle.ruleSet.useCount));
     setHistory([]);
@@ -271,7 +272,7 @@ function Game({
     setResult(null);
     setCoach(null);
     api.leaderboard(puzzle.id).then((data) => setLeaderboard(data.rows)).catch(() => setLeaderboard([]));
-  }, [puzzle.id, puzzle.cards, puzzle.ruleSet.useCount]);
+  }, [puzzle.id, puzzle.cards, puzzle.specialCards, puzzle.ruleSet.useCount]);
 
   useEffect(() => {
     if (solution || elapsed < 15000) return;
@@ -298,9 +299,10 @@ function Game({
   };
 
   const applyMerge = (leftId: string, rightId: string, op: Operator) => {
-    const left = cards.find((card) => card.id === leftId);
-    const right = cards.find((card) => card.id === rightId);
+    const left = resolveCard(cards.find((card) => card.id === leftId));
+    const right = resolveCard(cards.find((card) => card.id === rightId));
     if (!left || !right) return;
+    if (history.length < 2 && (left.special?.type === "frost" || right.special?.type === "frost")) return;
     const merged = mergeCards(left, right, op, puzzle.ruleSet);
     if (!merged) return;
     const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
@@ -309,6 +311,41 @@ function Game({
     setSelectedCards([merged.id]);
     setSelectedOp(null);
     void completeIfSolved(next);
+  };
+
+  const resolveCard = (card?: CardState): CardState | undefined => {
+    if (!card) return undefined;
+    if (card.special?.type !== "ghost" || !card.special.altValue) return card;
+    const useAlt = Math.floor(elapsed / 3000) % 2 === 1;
+    const value = useAlt ? card.special.altValue : card.value.n / card.value.d;
+    return {
+      ...card,
+      value: makeFraction(value),
+      expr: { type: "leaf", value: makeFraction(value), cardId: card.id, label: String(value) }
+    };
+  };
+
+  const applyUnary = (op: UnaryOperator) => {
+    if (solution || selectedCards.length !== 1) return;
+    const current = resolveCard(cards.find((card) => card.id === selectedCards[0]));
+    if (!current) return;
+    if (history.length < 2 && current.special?.type === "frost") return;
+    const nextCard = applyUnaryCard(current, op, puzzle.ruleSet);
+    if (!nextCard) return;
+    const next = cards.map((card) => (card.id === selectedCards[0] ? nextCard : card));
+    setHistory((items) => [...items, { cards }]);
+    setCards(next);
+    setSelectedCards([nextCard.id]);
+    void completeIfSolved(next);
+  };
+
+  const cycleJoker = () => {
+    if (solution || history.length > 0 || selectedCards.length !== 1) return;
+    const selected = cards.find((card) => card.id === selectedCards[0]);
+    if (selected?.special?.type !== "joker") return;
+    const nextValue = selected.value.n >= 9 ? 1 : selected.value.n + 1;
+    const value = makeFraction(nextValue);
+    setCards(cards.map((card) => card.id === selected.id ? { ...card, value, expr: { type: "leaf", value, cardId: card.id, label: String(nextValue) } } : card));
   };
 
   const pickCard = (id: string) => {
@@ -341,7 +378,7 @@ function Game({
   };
 
   const reset = () => {
-    const nextInitial = makeInitialCards(puzzle.cards);
+    const nextInitial = makeInitialCards(puzzle.cards, puzzle.specialCards);
     setCards(nextInitial.slice(0, puzzle.ruleSet.useCount));
     setReserveCards(nextInitial.slice(puzzle.ruleSet.useCount));
     setHistory([]);
@@ -392,7 +429,8 @@ function Game({
       <section className="card-board">
         {cards.map((card) => (
           <button key={card.id} className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""}`} onClick={() => pickCard(card.id)}>
-            {formatFraction(card.value)}
+            <span>{formatFraction(resolveCard(card)?.value ?? card.value)}</span>
+            {card.special && <small>{card.special.type === "frost" ? "冰" : card.special.type === "ghost" ? "幻" : "J"}</small>}
           </button>
         ))}
       </section>
@@ -418,10 +456,19 @@ function Game({
         ))}
       </section>
 
+      {puzzle.ruleSet.unaryOperators && (
+        <section className="ops unary-ops">
+          {puzzle.ruleSet.unaryOperators.map((op) => (
+            <button key={op} className="op-button" onClick={() => applyUnary(op)}>{unaryText[op]}</button>
+          ))}
+        </section>
+      )}
+
       <section className="tools">
         <button onClick={undo} disabled={!history.length || Boolean(solution)}><Undo2 size={18} />撤销</button>
         <button onClick={reset}><RotateCcw size={18} />重来</button>
         <button onClick={() => setHintsUsed((value) => Math.min(value + 1, debug.infiniteHints ? 99 : 4))}><Lightbulb size={18} />线索</button>
+        <button onClick={cycleJoker} disabled={!selectedCards.some((id) => cards.find((card) => card.id === id)?.special?.type === "joker")}><Sparkles size={18} />小丑</button>
       </section>
 
       {hintsUsed > 0 && !solution && <HintBox hints={hints} level={hintsUsed} />}
