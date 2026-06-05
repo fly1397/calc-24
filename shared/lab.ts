@@ -166,7 +166,11 @@ export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date()
     }
     if (collectionId === "special") {
       const type = level % 3 === 0 ? "joker" : level % 3 === 1 ? "frost" : "ghost";
-      const specialCards: SpecialCardSpec[] = [{ index: level % 4, type, altValue: ((level * 7) % 9) + 1 }];
+      const index = level % 4;
+      const original = base.cards[index];
+      const altValues = Array.from(new Set([((level * 7) % 9) + 1, ((level * 5 + 3) % 9) + 1, ((level * 3 + 4) % 9) + 1])).filter((value) => value !== original);
+      const fallback = original === 9 ? 8 : 9;
+      const specialCards: SpecialCardSpec[] = [{ index, type, altValue: altValues[0] ?? fallback, altValues: altValues.length ? altValues : [fallback] }];
       return makeRuntimePuzzle(base, collectionId, level, weekSeed, base.cards, ruleSets.specialCards, "hell", `${definition.title} ${level}`, specialCards);
     }
     if (collectionId === "advanced-math") {

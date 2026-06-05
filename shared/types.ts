@@ -6,6 +6,7 @@ export type SpecialCardSpec = {
   index: number;
   type: SpecialCardType;
   altValue?: number;
+  altValues?: number[];
 };
 
 export type RuleSet = {
@@ -14,6 +15,7 @@ export type RuleSet = {
   description: string;
   operators: Operator[];
   unaryOperators?: UnaryOperator[];
+  unaryLimit?: number;
   allowNegative: boolean;
   allowFraction: boolean;
   allowConcat?: boolean;

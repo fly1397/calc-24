@@ -109,6 +109,7 @@ export const ruleSets: Record<string, RuleSet> = {
     description: "允许使用平方、开方、阶乘等一元运算。",
     unaryOperators: ["square", "sqrt", "factorial"],
     requiredUnary: true,
+    unaryLimit: 1,
     cardCount: 4,
     useCount: 4
   }

@@ -251,6 +251,7 @@ function Game({
   const [selectedOp, setSelectedOp] = useState<Operator | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(Date.now());
   const [hintsUsed, setHintsUsed] = useState(0);
+  const [unaryUsed, setUnaryUsed] = useState(0);
   const [resets, setResets] = useState(0);
   const [solution, setSolution] = useState<Solution | null>(null);
   const [result, setResult] = useState<{ isNew: boolean; score: number; discoveredCount: number } | null>(null);
@@ -268,6 +269,7 @@ function Game({
     setSelectedOp(null);
     setStartedAt(Date.now());
     setHintsUsed(0);
+    setUnaryUsed(0);
     setResets(0);
     setSolution(null);
     setResult(null);
@@ -325,9 +327,9 @@ function Game({
 
   const resolveCard = (card?: CardState): CardState | undefined => {
     if (!card) return undefined;
-    if (card.special?.type !== "ghost" || !card.special.altValue) return card;
-    const useAlt = Math.floor(elapsed / 3000) % 2 === 1;
-    const value = useAlt ? card.special.altValue : card.value.n / card.value.d;
+    if (card.special?.type !== "ghost") return card;
+    const values = [card.value.n / card.value.d, ...(card.special.altValues?.length ? card.special.altValues : card.special.altValue ? [card.special.altValue] : [])];
+    const value = values[Math.floor(elapsed / 3000) % values.length];
     return {
       ...card,
       value: makeFraction(value),
@@ -337,6 +339,11 @@ function Game({
 
   const applyUnary = (op: UnaryOperator) => {
     if (solution || selectedCards.length !== 1) return;
+    const limit = puzzle.ruleSet.unaryLimit ?? 1;
+    if (unaryUsed >= limit) {
+      setNotice(`本关高阶符号最多使用 ${limit} 次。`);
+      return;
+    }
     const current = resolveCard(cards.find((card) => card.id === selectedCards[0]));
     if (!current) return;
     if (history.length < 2 && current.special?.type === "frost") {
@@ -349,6 +356,7 @@ function Game({
     setHistory((items) => [...items, { cards }]);
     setCards(next);
     setSelectedCards([nextCard.id]);
+    setUnaryUsed((value) => value + 1);
     void completeIfSolved(next);
   };
 
@@ -400,6 +408,9 @@ function Game({
     setSolution(null);
     setResult(null);
     setStartedAt(Date.now());
+    setHintsUsed(0);
+    setUnaryUsed(0);
+    setNotice(null);
     setResets((value) => value + 1);
   };
 
@@ -440,12 +451,12 @@ function Game({
         <section className="rule-note">
           {puzzle.specialCards.map((card) => (
             <span key={`${card.index}-${card.type}`}>
-              {card.type === "frost" ? "冰冻：前两步禁用" : card.type === "ghost" ? `幻影：每3秒切换为 ${card.altValue}` : "小丑：选中后可变 1-9"}
+              {card.type === "frost" ? "冰冻：前两步禁用" : card.type === "ghost" ? `幻影：每3秒循环 ${[puzzle.cards[card.index], ...(card.altValues ?? (card.altValue ? [card.altValue] : []))].join("/")}` : "小丑：选中后可变 1-9"}
             </span>
           ))}
         </section>
       ) : null}
-      {puzzle.ruleSet.requiredUnary && <section className="rule-note"><span>本关必须使用平方、开方或阶乘。</span></section>}
+      {puzzle.ruleSet.requiredUnary && <section className="rule-note"><span>本关必须使用平方、开方或阶乘，最多 {puzzle.ruleSet.unaryLimit ?? 1} 次。</span></section>}
       {notice && <section className="hint-box warning">{notice}</section>}
       {recommendation && <section className="coach-box focus"><Brain size={18} />{recommendation}</section>}
       {coach && !solution && <section className={`coach-box ${coach.tone}`}><Brain size={18} />{coach.text}</section>}

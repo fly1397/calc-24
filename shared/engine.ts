@@ -172,10 +172,17 @@ const containsUnary = (node: ExprNode): boolean => {
   return containsUnary(node.left) || containsUnary(node.right);
 };
 
+const countUnary = (node: ExprNode): number => {
+  if (node.type === "leaf") return 0;
+  if (node.type === "unary") return 1 + countUnary(node.child);
+  return countUnary(node.left) + countUnary(node.right);
+};
+
 export const satisfiesRule = (node: ExprNode, ruleSet: RuleSet): boolean => {
   if (ruleSet.requiredOperator && !containsOperator(node, ruleSet.requiredOperator)) return false;
   if (ruleSet.finalOperator && (node.type !== "op" || node.op !== ruleSet.finalOperator)) return false;
   if (ruleSet.requiredUnary && !containsUnary(node)) return false;
+  if (ruleSet.unaryLimit !== undefined && countUnary(node) > ruleSet.unaryLimit) return false;
   return true;
 };
 
@@ -229,6 +236,11 @@ export const solvePuzzle = (numbers: number[], target = 24, maxSolutions = 80, r
       return;
     }
     if (ruleSet.unaryOperators?.length) {
+      const unaryLimit = ruleSet.unaryLimit ?? 1;
+      const currentUnaryCount = cards.reduce((sum, card) => sum + countUnary(card.expr), 0);
+      if (currentUnaryCount >= unaryLimit) {
+        // Binary search continues below.
+      } else {
       for (let i = 0; i < cards.length; i += 1) {
         if (cards[i].expr.type === "unary") continue;
         for (const op of ruleSet.unaryOperators) {
@@ -237,6 +249,7 @@ export const solvePuzzle = (numbers: number[], target = 24, maxSolutions = 80, r
           if (Math.abs(nextCard.value.n / nextCard.value.d) > 720) continue;
           search(cards.map((card, index) => (index === i ? nextCard : card)));
         }
+      }
       }
     }
     for (let i = 0; i < cards.length; i += 1) {
