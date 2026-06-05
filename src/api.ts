@@ -27,7 +27,7 @@ const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
 export const api = {
   puzzles: () => request<{ puzzles: Puzzle[] }>("/api/puzzles"),
   puzzleIndex: () => request<{ puzzles: Puzzle[]; stages: StageDefinition[] }>("/api/puzzles"),
-  lab: () => request<{ collections: LabCollectionRuntime[]; puzzles: Puzzle[] }>("/api/lab"),
+  lab: (unlockAll = false) => request<{ collections: LabCollectionRuntime[]; puzzles: Puzzle[] }>(`/api/lab${unlockAll ? "?unlockAll=1" : ""}`),
   hell: () => request<{ layers: HellLayer[] }>("/api/hell"),
   race: () => request<{ puzzles: Puzzle[] }>("/api/race"),
   generate: (body: GeneratePuzzleConfig) =>

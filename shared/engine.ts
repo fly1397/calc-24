@@ -106,9 +106,6 @@ export const mergeCards = (left: CardState, right: CardState, op: Operator, rule
   };
 };
 
-export const isSolved = (cards: CardState[], target = target24): boolean =>
-  cards.length === 1 && equalsFraction(cards[0].value, target);
-
 export const solutionFromNode = (node: ExprNode): Solution => ({
   key: canonical(node),
   expression: expressionToString(node),
@@ -121,11 +118,14 @@ const containsOperator = (node: ExprNode, op: Operator): boolean => {
   return node.op === op || containsOperator(node.left, op) || containsOperator(node.right, op);
 };
 
-const satisfiesRule = (node: ExprNode, ruleSet: RuleSet): boolean => {
+export const satisfiesRule = (node: ExprNode, ruleSet: RuleSet): boolean => {
   if (ruleSet.requiredOperator && !containsOperator(node, ruleSet.requiredOperator)) return false;
   if (ruleSet.finalOperator && (node.type !== "op" || node.op !== ruleSet.finalOperator)) return false;
   return true;
 };
+
+export const isSolved = (cards: CardState[], target = target24, ruleSet: RuleSet = standardRuleSet): boolean =>
+  cards.length === 1 && equalsFraction(cards[0].value, target) && satisfiesRule(cards[0].expr, ruleSet);
 
 const combinations = <T,>(items: T[], count: number): T[][] => {
   if (count >= items.length) return [items];

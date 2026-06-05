@@ -95,9 +95,14 @@ const pickBase = (weekSeed: string, collectionId: string, level: number): Puzzle
 
 const makeRuntimePuzzle = (base: Puzzle, collectionId: string, level: number, weekSeed: string, cards: number[], ruleSet: Puzzle["ruleSet"], variant: Puzzle["variant"], title: string): Puzzle => {
   const solutions = solvePuzzle(cards, 24, 30, ruleSet);
-  const ds = scoreDifficulty(cards, solutions, ruleSet);
+  const fallback = solutions.length > 0 ? undefined : puzzles.find((candidate) => solvePuzzle(candidate.cards, 24, 2, ruleSet).length > 0);
+  const finalCards = fallback?.cards ?? cards;
+  const finalSolutions = fallback ? solvePuzzle(finalCards, 24, 30, ruleSet) : solutions;
+  const rawDs = scoreDifficulty(finalCards, finalSolutions, ruleSet);
+  const solutionRelief = finalSolutions.length >= 30 ? 24 : finalSolutions.length >= 16 ? 14 : finalSolutions.length >= 8 ? 8 : 0;
+  const ds = Math.max(1, Math.min(100, rawDs - solutionRelief));
   return {
-    ...base,
+    ...(fallback ?? base),
     id: `lab-${collectionId}-${weekSeed}-${level}`,
     seed: `LAB-${collectionId.toUpperCase()}-${weekSeed}-${level}`,
     title,
@@ -105,13 +110,13 @@ const makeRuntimePuzzle = (base: Puzzle, collectionId: string, level: number, we
     stageIndex: 90,
     level,
     stageLevel: level,
-    cards,
+    cards: finalCards,
     ds,
-    tags: Array.from(new Set([variant, ...solutions.flatMap((solution) => solution.tags), ...base.tags])).slice(0, 5),
+    tags: Array.from(new Set([variant, ...finalSolutions.flatMap((solution) => solution.tags), ...(fallback ?? base).tags])).slice(0, 5),
     boss: level === 20,
     variant,
     ruleSet,
-    solutionCount: Math.max(1, solutions.length)
+    solutionCount: Math.max(1, finalSolutions.length)
   };
 };
 
@@ -141,10 +146,10 @@ const concatPool = (): number[][] => {
   return result;
 };
 
-export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date(), count = 20): Puzzle[] => {
+export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date(), count = 20, includeLocked = false): Puzzle[] => {
   const weekSeed = weekSeedForDate(date);
   const definition = labCollectionDefinitions.find((item) => item.id === collectionId);
-  if (!definition?.enabled) return [];
+  if (!definition || (!definition.enabled && !includeLocked)) return [];
   return Array.from({ length: count }, (_, index) => {
     const level = index + 1;
     const base = pickBase(weekSeed, collectionId, level);
@@ -158,6 +163,10 @@ export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date()
       const extra = hard ? [level % 6 + 1, level % 6 + 1] : [1];
       return makeRuntimePuzzle(base, collectionId, level, weekSeed, [...base.cards, ...extra], hard ? ruleSets.grand6 : ruleSets.grand5, "grand", `${definition.title} ${level}`);
     }
+    if (collectionId === "special") {
+      const ruleSet = level % 2 === 0 ? ruleSets.noNegative : ruleSets.mustDivide;
+      return makeRuntimePuzzle(base, collectionId, level, weekSeed, base.cards, ruleSet, "hell", `${definition.title} ${level}`);
+    }
     const pool = concatPool();
     const cards = pool[hash(`${weekSeed}-${level}`) % pool.length];
     return makeRuntimePuzzle(base, collectionId, level, weekSeed, cards, ruleSets.concat, "concat", `${definition.title} ${level}`);
@@ -166,15 +175,16 @@ export const generateWeeklyLabPuzzles = (collectionId: string, date = new Date()
 
 const weeklyCache = new Map<string, LabCollectionRuntime[]>();
 
-export const generateWeeklyLabCollections = (date = new Date()): LabCollectionRuntime[] => {
+export const generateWeeklyLabCollections = (date = new Date(), includeLocked = false): LabCollectionRuntime[] => {
   const weekSeed = weekSeedForDate(date);
-  const cached = weeklyCache.get(weekSeed);
+  const cacheKey = `${weekSeed}:${includeLocked ? "all" : "normal"}`;
+  const cached = weeklyCache.get(cacheKey);
   if (cached) return cached;
   const collections = labCollectionDefinitions.map((definition) => ({
     ...definition,
     weekSeed,
-    puzzles: definition.enabled ? generateWeeklyLabPuzzles(definition.id, date, 20) : []
+    puzzles: definition.enabled || includeLocked ? generateWeeklyLabPuzzles(definition.id, date, 20, includeLocked) : []
   }));
-  weeklyCache.set(weekSeed, collections);
+  weeklyCache.set(cacheKey, collections);
   return collections;
 };

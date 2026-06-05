@@ -44,6 +44,8 @@ const makePuzzle = (base: Puzzle, layerIndex: number, level: number, ruleSet: Ru
   const solutions = solvePuzzle(base.cards, 24, 30, ruleSet);
   const usableBase = solutions.length > 0 ? base : puzzles.find((candidate) => solvePuzzle(candidate.cards, 24, 2, ruleSet).length > 0) ?? base;
   const usableSolutions = solvePuzzle(usableBase.cards, 24, 30, ruleSet);
+  const rawDs = scoreDifficulty(usableBase.cards, usableSolutions, ruleSet) + layerIndex * 2;
+  const solutionRelief = usableSolutions.length >= 30 ? 22 : usableSolutions.length >= 16 ? 12 : usableSolutions.length >= 8 ? 6 : 0;
   return {
     ...usableBase,
     id: `hell-${layerIndex + 1}-${level}`,
@@ -53,7 +55,7 @@ const makePuzzle = (base: Puzzle, layerIndex: number, level: number, ruleSet: Ru
     stageIndex: 200 + layerIndex,
     level,
     stageLevel: level,
-    ds: Math.min(100, scoreDifficulty(usableBase.cards, usableSolutions, ruleSet) + layerIndex * 2),
+    ds: Math.max(1, Math.min(100, rawDs - solutionRelief)),
     tags: Array.from(new Set(["地狱", ruleSet.name, ...usableBase.tags])).slice(0, 5),
     boss: level === 10,
     variant: "hell",

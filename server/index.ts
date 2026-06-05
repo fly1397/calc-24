@@ -23,7 +23,8 @@ app.get("/api/puzzles", (_req, res) => {
 });
 
 app.get("/api/lab", (_req, res) => {
-  const collections = generateWeeklyLabCollections(new Date());
+  const includeLocked = _req.query.unlockAll === "1";
+  const collections = generateWeeklyLabCollections(new Date(), includeLocked);
   res.json({ collections, puzzles: collections.flatMap((collection) => collection.puzzles) });
 });
 
@@ -44,7 +45,7 @@ app.post("/api/generate", (req, res) => {
 });
 
 app.get("/api/puzzles/:id", (req, res) => {
-  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date()).flatMap((collection) => collection.puzzles);
+  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date(), true).flatMap((collection) => collection.puzzles);
   const puzzle = getPuzzleById(req.params.id) ?? weeklyLabPuzzles.find((item) => item.id === req.params.id) ?? findModePuzzle(req.params.id);
   if (!puzzle) {
     res.status(404).json({ error: "Puzzle not found" });
@@ -59,7 +60,7 @@ app.get("/api/daily", (_req, res) => {
 });
 
 app.get("/api/seed/:seed", (req, res) => {
-  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date()).flatMap((collection) => collection.puzzles);
+  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date(), true).flatMap((collection) => collection.puzzles);
   const puzzle = getPuzzleBySeed(req.params.seed) ?? weeklyLabPuzzles.find((item) => item.seed === req.params.seed);
   if (!puzzle) {
     res.status(404).json({ error: "Seed not found" });
