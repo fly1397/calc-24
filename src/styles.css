@@ -498,23 +498,39 @@ h2 span {
   transform: translateY(-2px);
 }
 
-.number-card.merging {
-  animation: cardMerge 220ms ease-in-out forwards;
+.number-card.merge-from {
+  animation: cardFlyIntoTarget 220ms ease-in-out forwards;
   pointer-events: none;
 }
 
-@keyframes cardMerge {
+.number-card.merge-to {
+  animation: cardReceive 220ms ease-in-out;
+}
+
+@keyframes cardFlyIntoTarget {
   0% {
-    transform: scale(1);
+    transform: translate(0, 0) scale(1);
     opacity: 1;
   }
-  60% {
-    transform: scale(0.88);
-    opacity: 0.72;
+  70% {
+    transform: translate(calc(var(--merge-x) * 0.72), calc(var(--merge-y) * 0.72)) scale(0.72);
+    opacity: 0.82;
   }
   100% {
-    transform: scale(0.18);
+    transform: translate(var(--merge-x), var(--merge-y)) scale(0.22);
     opacity: 0;
+  }
+}
+
+@keyframes cardReceive {
+  0% {
+    transform: scale(1);
+  }
+  58% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

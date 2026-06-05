@@ -16,7 +16,7 @@ import {
   Trophy,
   Undo2
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { applyUnaryCard, makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
 import { equalsFraction, formatFraction, makeFraction } from "../shared/fraction";
 import type { LabCollectionRuntime } from "../shared/lab";
@@ -29,6 +29,7 @@ type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply" | 
 type Mode = "main" | "daily" | "training" | "lab" | "hell" | "race";
 type HistoryItem = { cards: CardState[] };
 type Stats = { attempts: number; solvedPuzzles: number; discoveredSolutions: number; archive: Array<{ puzzleId: string; discovered: number }> };
+type MergeAnimation = { fromId: string; toId: string; dx: number; dy: number } | null;
 
 const opText: Record<Operator, string> = { "+": "+", "-": "-", "*": "×", "/": "÷", concat: "拼" };
 const unaryText: Record<UnaryOperator, string> = { square: "x²", sqrt: "√x", factorial: "x!" };
@@ -251,7 +252,7 @@ function Game({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [selectedOp, setSelectedOp] = useState<Operator | null>(null);
-  const [mergingIds, setMergingIds] = useState<string[]>([]);
+  const [mergeAnimation, setMergeAnimation] = useState<MergeAnimation>(null);
   const [startedAt, setStartedAt] = useState<number | null>(Date.now());
   const [hintsUsed, setHintsUsed] = useState(0);
   const [unaryUsed, setUnaryUsed] = useState(0);
@@ -261,6 +262,7 @@ function Game({
   const [leaderboard, setLeaderboard] = useState<Array<StoredAttempt & { score: number }>>([]);
   const [coach, setCoach] = useState<CoachMessage | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const elapsed = useClock(!solution, startedAt);
 
   useEffect(() => {
@@ -270,7 +272,7 @@ function Game({
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
-    setMergingIds([]);
+    setMergeAnimation(null);
     setStartedAt(Date.now());
     setHintsUsed(0);
     setUnaryUsed(0);
@@ -322,13 +324,17 @@ function Game({
     const merged = mergeCards(left, right, op, puzzle.ruleSet);
     if (!merged) return;
     const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
-    setMergingIds([leftId, rightId]);
+    const fromRect = cardRefs.current[rightId]?.getBoundingClientRect();
+    const toRect = cardRefs.current[leftId]?.getBoundingClientRect();
+    const dx = fromRect && toRect ? toRect.left + toRect.width / 2 - (fromRect.left + fromRect.width / 2) : -80;
+    const dy = fromRect && toRect ? toRect.top + toRect.height / 2 - (fromRect.top + fromRect.height / 2) : -24;
+    setMergeAnimation({ fromId: rightId, toId: leftId, dx, dy });
     window.setTimeout(() => {
       setHistory((items) => [...items, { cards }]);
       setCards(next);
       setSelectedCards([merged.id]);
       setSelectedOp(null);
-      setMergingIds([]);
+      setMergeAnimation(null);
       void completeIfSolved(next);
     }, 220);
   };
@@ -404,7 +410,7 @@ function Game({
     setHistory(history.slice(0, -1));
     setSelectedCards([]);
     setSelectedOp(null);
-    setMergingIds([]);
+    setMergeAnimation(null);
   };
 
   const reset = () => {
@@ -414,7 +420,7 @@ function Game({
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
-    setMergingIds([]);
+    setMergeAnimation(null);
     setSolution(null);
     setResult(null);
     setStartedAt(Date.now());
@@ -479,7 +485,15 @@ function Game({
 
       <section className="card-board">
         {cards.map((card) => (
-          <button key={card.id} className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""} ${mergingIds.includes(card.id) ? "merging" : ""}`} onClick={() => pickCard(card.id)}>
+          <button
+            key={card.id}
+            ref={(node) => {
+              cardRefs.current[card.id] = node;
+            }}
+            style={mergeAnimation?.fromId === card.id ? ({ "--merge-x": `${mergeAnimation.dx}px`, "--merge-y": `${mergeAnimation.dy}px` } as React.CSSProperties) : undefined}
+            className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""} ${mergeAnimation?.fromId === card.id ? "merge-from" : ""} ${mergeAnimation?.toId === card.id ? "merge-to" : ""}`}
+            onClick={() => pickCard(card.id)}
+          >
             <span>{formatFraction(resolveCard(card)?.value ?? card.value)}</span>
             {card.special && <small>{card.special.type === "frost" ? "冰" : card.special.type === "ghost" ? "幻" : "J"}</small>}
           </button>
