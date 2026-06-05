@@ -5,5 +5,7 @@ data/store.json
 .env.*
 .DS_Store
 .kb-index.jsonl
+.agents/
+skills-lock.json
 npm-debug.log*
 coverage/
