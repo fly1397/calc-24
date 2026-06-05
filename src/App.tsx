@@ -17,7 +17,8 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
 import { formatFraction } from "../shared/fraction";
-import type { LabCollection, StageDefinition } from "../shared/puzzles";
+import type { LabCollectionRuntime } from "../shared/lab";
+import type { StageDefinition } from "../shared/puzzles";
 import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
 
@@ -552,7 +553,7 @@ function LabView({
   onPick,
   onNavigate
 }: {
-  collections: LabCollection[];
+  collections: LabCollectionRuntime[];
   onBack: () => void;
   onPick: (puzzle: Puzzle) => void;
   onNavigate: (view: View) => void;
@@ -572,11 +573,11 @@ function LabView({
           <em>奖励：{selected.reward}</em>
         </section>
         {selected.puzzles.length === 0 ? <p className="empty">{selected.unlockHint}</p> : (
-          <section className="clinic-list">
+          <section className="level-grid lab-level-grid">
             {selected.puzzles.map((puzzle) => (
-              <button key={puzzle.id} onClick={() => onPick(puzzle)}>
-                <strong>{puzzle.title}</strong>
-                <span>{puzzle.cards.join("  ")} · DS {puzzle.ds} · {puzzle.ruleSet.description}</span>
+              <button key={puzzle.id} className="level-cell" onClick={() => onPick(puzzle)}>
+                {puzzle.stageLevel}
+                <small>DS {puzzle.ds}</small>
               </button>
             ))}
           </section>
@@ -695,7 +696,7 @@ export function App() {
   const [view, setView] = useState<View>("home");
   const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
   const [labPuzzles, setLabPuzzles] = useState<Puzzle[]>([]);
-  const [labCollections, setLabCollections] = useState<LabCollection[]>([]);
+  const [labCollections, setLabCollections] = useState<LabCollectionRuntime[]>([]);
   const [stages, setStages] = useState<StageDefinition[]>([]);
   const [payload, setPayload] = useState<PuzzlePayload | null>(null);
   const [mode, setMode] = useState<Mode>("main");

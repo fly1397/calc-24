@@ -1,7 +1,8 @@
 import express from "express";
 import path from "node:path";
 import { generatePuzzle } from "../shared/generator";
-import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, labCollections, labPuzzles, puzzles, stages } from "../shared/puzzles";
+import { generateWeeklyLabCollections } from "../shared/lab";
+import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, puzzles, stages } from "../shared/puzzles";
 import { coachForState, makeHints, recommendDifficulty, scoreAttempt } from "../shared/engine";
 import { addAttempt, attemptsForPuzzle, readStore } from "./store";
 import type { PlayerMetrics, StoredAttempt } from "../shared/types";
@@ -21,7 +22,8 @@ app.get("/api/puzzles", (_req, res) => {
 });
 
 app.get("/api/lab", (_req, res) => {
-  res.json({ collections: labCollections, puzzles: labPuzzles });
+  const collections = generateWeeklyLabCollections(new Date());
+  res.json({ collections, puzzles: collections.flatMap((collection) => collection.puzzles) });
 });
 
 app.post("/api/generate", (req, res) => {
@@ -33,7 +35,8 @@ app.post("/api/generate", (req, res) => {
 });
 
 app.get("/api/puzzles/:id", (req, res) => {
-  const puzzle = getPuzzleById(req.params.id);
+  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date()).flatMap((collection) => collection.puzzles);
+  const puzzle = getPuzzleById(req.params.id) ?? weeklyLabPuzzles.find((item) => item.id === req.params.id);
   if (!puzzle) {
     res.status(404).json({ error: "Puzzle not found" });
     return;
@@ -47,7 +50,8 @@ app.get("/api/daily", (_req, res) => {
 });
 
 app.get("/api/seed/:seed", (req, res) => {
-  const puzzle = getPuzzleBySeed(req.params.seed);
+  const weeklyLabPuzzles = generateWeeklyLabCollections(new Date()).flatMap((collection) => collection.puzzles);
+  const puzzle = getPuzzleBySeed(req.params.seed) ?? weeklyLabPuzzles.find((item) => item.seed === req.params.seed);
   if (!puzzle) {
     res.status(404).json({ error: "Seed not found" });
     return;
