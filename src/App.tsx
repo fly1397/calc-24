@@ -1,0 +1,578 @@
+import {
+  ArrowLeft,
+  Archive,
+  Brain,
+  CalendarDays,
+  FlaskConical,
+  Lightbulb,
+  ListRestart,
+  Medal,
+  Play,
+  RotateCcw,
+  Share2,
+  Sparkles,
+  Trophy,
+  Undo2
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { makeInitialCards, mergeCards, isSolved, solutionFromNode } from "../shared/engine";
+import { formatFraction } from "../shared/fraction";
+import type { StageDefinition } from "../shared/puzzles";
+import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
+import { api, type PuzzlePayload } from "./api";
+
+type View = "home" | "map" | "game" | "clinic" | "archive" | "lab";
+type Mode = "main" | "daily" | "training" | "lab";
+type HistoryItem = { cards: CardState[] };
+type Stats = { attempts: number; solvedPuzzles: number; discoveredSolutions: number; archive: Array<{ puzzleId: string; discovered: number }> };
+
+const opText: Record<Operator, string> = { "+": "+", "-": "-", "*": "×", "/": "÷" };
+
+const saveLocal = (key: string, value: unknown) => localStorage.setItem(key, JSON.stringify(value));
+const loadLocal = <T,>(key: string, fallback: T): T => {
+  const raw = localStorage.getItem(key);
+  return raw ? (JSON.parse(raw) as T) : fallback;
+};
+
+const defaultMetrics: PlayerMetrics = {
+  recentElapsedMs: [],
+  recentHints: [],
+  recentResets: [],
+  solvedStreak: 0,
+  failedStreak: 0
+};
+
+const useClock = (running: boolean, startedAt: number | null) => {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  return startedAt ? now - startedAt : 0;
+};
+
+function Home({
+  onNavigate,
+  onStartDaily,
+  onStartTraining,
+  stats
+}: {
+  onNavigate: (view: View) => void;
+  onStartDaily: () => void;
+  onStartTraining: () => void;
+  stats?: Stats;
+}) {
+  return (
+    <main className="screen home">
+      <section className="brand">
+        <div className="brand-mark">24</div>
+        <div>
+          <p className="eyebrow">绝对算式</p>
+          <h1>找到你的神仙解法</h1>
+        </div>
+      </section>
+
+      <section className="daily-band">
+        <div>
+          <p>今日同题</p>
+          <strong>全服一题，比速度也比思路</strong>
+        </div>
+        <button className="icon-button solid" onClick={onStartDaily} aria-label="开始每日一题">
+          <CalendarDays size={20} />
+        </button>
+      </section>
+
+      <section className="mode-grid">
+        <button className="mode-tile primary" onClick={() => onNavigate("map")}>
+          <Play size={24} />
+          <strong>主线闯关</strong>
+          <span>14 阶段 280 关</span>
+        </button>
+        <button className="mode-tile" onClick={onStartTraining}>
+          <Brain size={24} />
+          <strong>智能训练</strong>
+          <span>根据表现动态调难</span>
+        </button>
+        <button className="mode-tile" onClick={() => onNavigate("lab")}>
+          <FlaskConical size={24} />
+          <strong>异构实验室</strong>
+          <span>规则限制挑战</span>
+        </button>
+        <button className="mode-tile" onClick={() => onNavigate("archive")}>
+          <Archive size={24} />
+          <strong>解法档案</strong>
+          <span>查看点亮进度</span>
+        </button>
+      </section>
+
+      <section className="actions">
+        <button className="secondary-action" onClick={() => onNavigate("clinic")}>
+          <ListRestart size={20} />
+          残局诊所
+        </button>
+      </section>
+
+      <section className="stats">
+        <div><strong>{stats?.solvedPuzzles ?? 0}</strong><span>已通关</span></div>
+        <div><strong>{stats?.discoveredSolutions ?? 0}</strong><span>解法</span></div>
+        <div><strong>{stats?.attempts ?? 0}</strong><span>记录</span></div>
+      </section>
+    </main>
+  );
+}
+
+function LevelMap({
+  puzzles,
+  stages,
+  solved,
+  onBack,
+  onPick
+}: {
+  puzzles: Puzzle[];
+  stages: StageDefinition[];
+  solved: string[];
+  onBack: () => void;
+  onPick: (puzzle: Puzzle) => void;
+}) {
+  const [stageIndex, setStageIndex] = useState(0);
+  const stagePuzzles = puzzles.filter((puzzle) => puzzle.stageIndex === stageIndex);
+  const stage = stages[stageIndex];
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">主线闯关</p><h2>{stage?.name ?? "阶段"}</h2></div>
+      </header>
+      <section className="stage-tabs">
+        {stages.map((item, index) => (
+          <button key={item.name} className={stageIndex === index ? "active" : ""} onClick={() => setStageIndex(index)}>
+            {index + 1}
+          </button>
+        ))}
+      </section>
+      <p className="stage-theme">{stage?.theme}</p>
+      <section className="level-grid">
+        {stagePuzzles.map((puzzle) => {
+          const done = solved.includes(puzzle.id);
+          return (
+            <button key={puzzle.id} className={`level-cell ${done ? "done" : ""} ${puzzle.boss ? "exam" : ""}`} onClick={() => onPick(puzzle)}>
+              {puzzle.boss ? <Trophy size={22} /> : puzzle.stageLevel}
+              <small>DS {puzzle.ds}</small>
+            </button>
+          );
+        })}
+      </section>
+    </main>
+  );
+}
+
+function Game({
+  payload,
+  mode,
+  recommendation,
+  onBack,
+  onSolved,
+  onNextTraining
+}: {
+  payload: PuzzlePayload;
+  mode: Mode;
+  recommendation?: string;
+  onBack: () => void;
+  onSolved: (puzzleId: string, elapsedMs: number, hintsUsed: number, resets: number) => void;
+  onNextTraining: () => void;
+}) {
+  const { puzzle, hints, solutionCount } = payload;
+  const [cards, setCards] = useState<CardState[]>(() => makeInitialCards(puzzle.cards));
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [selectedOp, setSelectedOp] = useState<Operator | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(Date.now());
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [resets, setResets] = useState(0);
+  const [solution, setSolution] = useState<Solution | null>(null);
+  const [result, setResult] = useState<{ isNew: boolean; score: number; discoveredCount: number } | null>(null);
+  const [leaderboard, setLeaderboard] = useState<Array<StoredAttempt & { score: number }>>([]);
+  const [coach, setCoach] = useState<CoachMessage | null>(null);
+  const elapsed = useClock(!solution, startedAt);
+
+  useEffect(() => {
+    setCards(makeInitialCards(puzzle.cards));
+    setHistory([]);
+    setSelectedCards([]);
+    setSelectedOp(null);
+    setStartedAt(Date.now());
+    setHintsUsed(0);
+    setResets(0);
+    setSolution(null);
+    setResult(null);
+    setCoach(null);
+    api.leaderboard(puzzle.id).then((data) => setLeaderboard(data.rows)).catch(() => setLeaderboard([]));
+  }, [puzzle.id, puzzle.cards]);
+
+  useEffect(() => {
+    if (solution || elapsed < 15000) return;
+    const bucket = Math.floor(elapsed / 20000);
+    api.coach({ puzzleId: puzzle.id, elapsedMs: elapsed, hintsUsed, cardsLeft: cards.length })
+      .then((data) => setCoach(data.message))
+      .catch(() => undefined);
+  }, [Math.floor(elapsed / 20000), solution, hintsUsed, cards.length, puzzle.id]);
+
+  const completeIfSolved = async (nextCards: CardState[]) => {
+    if (!isSolved(nextCards)) return;
+    const solved = solutionFromNode(nextCards[0].expr);
+    setSolution(solved);
+    const elapsedMs = Date.now() - (startedAt ?? Date.now());
+    const response = await api.submitAttempt({
+      puzzleId: puzzle.id,
+      solutionKey: solved.key,
+      expression: solved.expression,
+      elapsedMs,
+      hintsUsed
+    });
+    setResult(response);
+    onSolved(puzzle.id, elapsedMs, hintsUsed, resets);
+  };
+
+  const applyMerge = (leftId: string, rightId: string, op: Operator) => {
+    const left = cards.find((card) => card.id === leftId);
+    const right = cards.find((card) => card.id === rightId);
+    if (!left || !right) return;
+    const merged = mergeCards(left, right, op, puzzle.ruleSet);
+    if (!merged) return;
+    const next = [...cards.filter((card) => card.id !== leftId && card.id !== rightId), merged];
+    setHistory((items) => [...items, { cards }]);
+    setCards(next);
+    setSelectedCards([merged.id]);
+    setSelectedOp(null);
+    void completeIfSolved(next);
+  };
+
+  const pickCard = (id: string) => {
+    if (solution) return;
+    if (selectedCards.includes(id)) {
+      setSelectedCards(selectedCards.filter((item) => item !== id));
+      return;
+    }
+    const next = [...selectedCards, id].slice(-2);
+    setSelectedCards(next);
+    if (next.length === 2 && selectedOp) applyMerge(next[0], next[1], selectedOp);
+  };
+
+  const pickOp = (op: Operator) => {
+    if (solution || !puzzle.ruleSet.operators.includes(op)) return;
+    if (selectedCards.length === 2) {
+      applyMerge(selectedCards[0], selectedCards[1], op);
+      return;
+    }
+    setSelectedOp(op);
+  };
+
+  const undo = () => {
+    const last = history.at(-1);
+    if (!last || solution) return;
+    setCards(last.cards);
+    setHistory(history.slice(0, -1));
+    setSelectedCards([]);
+    setSelectedOp(null);
+  };
+
+  const reset = () => {
+    setCards(makeInitialCards(puzzle.cards));
+    setHistory([]);
+    setSelectedCards([]);
+    setSelectedOp(null);
+    setSolution(null);
+    setResult(null);
+    setStartedAt(Date.now());
+    setResets((value) => value + 1);
+  };
+
+  const addToClinic = () => {
+    const clinic = loadLocal<string[]>("clinic", []);
+    saveLocal("clinic", Array.from(new Set([puzzle.id, ...clinic])));
+    onBack();
+  };
+
+  return (
+    <main className="screen game">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div>
+          <p className="eyebrow">{mode === "daily" ? "每日一题" : mode === "training" ? "智能训练" : puzzle.stage}</p>
+          <h2>{puzzle.title} <span>{puzzle.level}/280</span></h2>
+        </div>
+        <div className="timer">{(elapsed / 1000).toFixed(1)}s</div>
+      </header>
+
+      <section className="puzzle-info">
+        <span>目标 {puzzle.target}</span>
+        <span>{puzzle.ruleSet.name}</span>
+        <span>DS {puzzle.ds}</span>
+        <span>{solutionCount} 种参考解</span>
+      </section>
+      {recommendation && <section className="coach-box focus"><Brain size={18} />{recommendation}</section>}
+      {coach && !solution && <section className={`coach-box ${coach.tone}`}><Brain size={18} />{coach.text}</section>}
+
+      <section className="card-board">
+        {cards.map((card) => (
+          <button key={card.id} className={`number-card ${selectedCards.includes(card.id) ? "selected" : ""}`} onClick={() => pickCard(card.id)}>
+            {formatFraction(card.value)}
+          </button>
+        ))}
+      </section>
+
+      <section className="ops">
+        {(["+", "-", "*", "/"] as Operator[]).map((op) => (
+          <button key={op} disabled={!puzzle.ruleSet.operators.includes(op)} className={`op-button ${selectedOp === op ? "active" : ""}`} onClick={() => pickOp(op)}>
+            {opText[op]}
+          </button>
+        ))}
+      </section>
+
+      <section className="tools">
+        <button onClick={undo} disabled={!history.length || Boolean(solution)}><Undo2 size={18} />撤销</button>
+        <button onClick={reset}><RotateCcw size={18} />重来</button>
+        <button onClick={() => setHintsUsed((value) => Math.min(value + 1, 4))}><Lightbulb size={18} />线索</button>
+      </section>
+
+      {hintsUsed > 0 && !solution && <HintBox hints={hints} level={hintsUsed} />}
+      {!solution && elapsed > 45000 && <button className="clinic-button" onClick={addToClinic}>先收进残局诊所</button>}
+      {solution && (
+        <ResultPanel
+          solution={solution}
+          result={result}
+          elapsed={elapsed}
+          hintsUsed={hintsUsed}
+          seed={puzzle.seed}
+          leaderboard={leaderboard}
+          mode={mode}
+          onReset={reset}
+          onNextTraining={onNextTraining}
+        />
+      )}
+    </main>
+  );
+}
+
+function HintBox({ hints, level }: { hints: HintPack; level: number }) {
+  const text = level === 1 ? hints.level1 : level === 2 ? hints.level2 : level === 3 ? hints.level3 : hints.answer.join("；");
+  return <section className="hint-box"><Lightbulb size={18} />{text}</section>;
+}
+
+function ResultPanel({
+  solution,
+  result,
+  elapsed,
+  hintsUsed,
+  seed,
+  leaderboard,
+  mode,
+  onReset,
+  onNextTraining
+}: {
+  solution: Solution;
+  result: { isNew: boolean; score: number; discoveredCount: number } | null;
+  elapsed: number;
+  hintsUsed: number;
+  seed: string;
+  leaderboard: Array<StoredAttempt & { score: number }>;
+  mode: Mode;
+  onReset: () => void;
+  onNextTraining: () => void;
+}) {
+  const shareText = `我用 ${(elapsed / 1000).toFixed(1)} 秒解开了这道 24 点：${solution.expression} = 24。Seed：${seed}`;
+  const copyShare = async () => navigator.clipboard?.writeText(shareText);
+  return (
+    <section className="result">
+      <div className="result-title">
+        <Medal />
+        <div>
+          <p>{result?.isNew ? "发现新解法" : "通关成功"}</p>
+          <strong>{solution.expression} = 24</strong>
+        </div>
+      </div>
+      <div className="tag-row">
+        {solution.tags.map((tag) => <span key={tag}>{tag}</span>)}
+        {hintsUsed === 0 && <span>无提示</span>}
+      </div>
+      <div className="score-row">
+        <div><strong>{result?.score ?? 0}</strong><span>得分</span></div>
+        <div><strong>{result?.discoveredCount ?? 1}</strong><span>已发现解法</span></div>
+      </div>
+      <ol className="steps">{solution.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+      <div className="result-actions">
+        <button onClick={onReset}><Sparkles size={18} />再找一种</button>
+        <button onClick={copyShare}><Share2 size={18} />复制挑战</button>
+        {mode === "training" && <button onClick={onNextTraining}><Brain size={18} />下一题</button>}
+      </div>
+      {leaderboard.length > 0 && (
+        <div className="leaderboard">
+          <p>本题最快记录</p>
+          {leaderboard.slice(0, 3).map((row, index) => (
+            <span key={`${row.createdAt}-${row.solutionKey}`}>{index + 1}. {(row.elapsedMs / 1000).toFixed(1)}s · {row.hintsUsed ? `${row.hintsUsed} 线索` : "无提示"}</span>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Clinic({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
+  const [items, setItems] = useState(() => loadLocal<string[]>("clinic", []));
+  const clinicPuzzles = puzzles.filter((puzzle) => items.includes(puzzle.id));
+  const clear = () => {
+    saveLocal("clinic", []);
+    setItems([]);
+  };
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">残局诊所</p><h2>回来复仇</h2></div>
+      </header>
+      {clinicPuzzles.length === 0 ? <p className="empty">还没有收治的难题。</p> : (
+        <section className="clinic-list">
+          {clinicPuzzles.map((puzzle) => (
+            <button key={puzzle.id} onClick={() => onPick(puzzle)}>
+              <strong>{puzzle.title}</strong>
+              <span>{puzzle.cards.join("  ")} · DS {puzzle.ds} · {puzzle.ruleSet.name}</span>
+            </button>
+          ))}
+        </section>
+      )}
+      {clinicPuzzles.length > 0 && <button className="secondary-action" onClick={clear}>清空诊所</button>}
+    </main>
+  );
+}
+
+function ArchiveView({ puzzles, stats, onBack, onPick }: { puzzles: Puzzle[]; stats?: Stats; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
+  const archive = new Map((stats?.archive ?? []).map((item) => [item.puzzleId, item.discovered]));
+  const active = puzzles.filter((puzzle) => archive.has(puzzle.id)).slice(0, 60);
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">解法档案</p><h2>已点亮思路</h2></div>
+      </header>
+      <section className="archive-summary">
+        <div><strong>{stats?.discoveredSolutions ?? 0}</strong><span>总解法</span></div>
+        <div><strong>{active.length}</strong><span>有关卡记录</span></div>
+      </section>
+      {active.length === 0 ? <p className="empty">先通关几题，这里会展示你的解法图鉴。</p> : (
+        <section className="clinic-list">
+          {active.map((puzzle) => (
+            <button key={puzzle.id} onClick={() => onPick(puzzle)}>
+              <strong>{puzzle.stage} · {puzzle.title}</strong>
+              <span>已发现 {archive.get(puzzle.id)} / {puzzle.solutionCount} · {puzzle.tags.slice(0, 3).join(" / ")}</span>
+            </button>
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}
+
+function LabView({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
+  const labPuzzles = puzzles.filter((puzzle) => puzzle.boss).slice(0, 28);
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">异构实验室</p><h2>规则挑战</h2></div>
+      </header>
+      <section className="clinic-list">
+        {labPuzzles.map((puzzle) => (
+          <button key={puzzle.id} onClick={() => onPick(puzzle)}>
+            <strong>{puzzle.ruleSet.name}</strong>
+            <span>{puzzle.stage} · {puzzle.cards.join("  ")} · {puzzle.ruleSet.description}</span>
+          </button>
+        ))}
+      </section>
+    </main>
+  );
+}
+
+export function App() {
+  const [view, setView] = useState<View>("home");
+  const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
+  const [stages, setStages] = useState<StageDefinition[]>([]);
+  const [payload, setPayload] = useState<PuzzlePayload | null>(null);
+  const [mode, setMode] = useState<Mode>("main");
+  const [recommendation, setRecommendation] = useState<string>();
+  const [solved, setSolved] = useState(() => loadLocal<string[]>("solved", []));
+  const [metrics, setMetrics] = useState(() => loadLocal<PlayerMetrics>("metrics", defaultMetrics));
+  const [stats, setStats] = useState<Stats>();
+
+  useEffect(() => {
+    api.puzzleIndex().then((data) => {
+      setPuzzles(data.puzzles);
+      setStages(data.stages);
+    });
+    api.stats().then(setStats).catch(() => undefined);
+  }, []);
+
+  const refreshStats = () => api.stats().then(setStats).catch(() => undefined);
+
+  const startPuzzle = async (puzzle: Puzzle, nextMode: Mode = "main") => {
+    const data = await api.puzzle(puzzle.id);
+    setPayload(data);
+    setMode(nextMode);
+    setRecommendation(undefined);
+    setView("game");
+  };
+
+  const startDaily = async () => {
+    const data = await api.daily();
+    setPayload(data);
+    setMode("daily");
+    setRecommendation(undefined);
+    setView("game");
+  };
+
+  const startTraining = async () => {
+    const data = await api.trainingNext({ ...metrics, excludeIds: solved });
+    setPayload(data);
+    setMode("training");
+    setRecommendation(data.recommendation.reason);
+    setView("game");
+  };
+
+  const markSolved = (puzzleId: string, elapsedMs: number, hintsUsed: number, resets: number) => {
+    const nextSolved = Array.from(new Set([...solved, puzzleId]));
+    const nextMetrics: PlayerMetrics = {
+      recentElapsedMs: [...metrics.recentElapsedMs.slice(-9), elapsedMs],
+      recentHints: [...metrics.recentHints.slice(-9), hintsUsed],
+      recentResets: [...metrics.recentResets.slice(-9), resets],
+      solvedStreak: metrics.solvedStreak + 1,
+      failedStreak: 0,
+      currentLevel: Math.max(metrics.currentLevel ?? 0, Number(puzzleId.replace(/\D/g, "")) || 0)
+    };
+    setSolved(nextSolved);
+    setMetrics(nextMetrics);
+    saveLocal("solved", nextSolved);
+    saveLocal("metrics", nextMetrics);
+    void refreshStats();
+  };
+
+  const currentGame = useMemo(() => {
+    if (!payload) return null;
+    return (
+      <Game
+        payload={payload}
+        mode={mode}
+        recommendation={recommendation}
+        onBack={() => setView(mode === "main" ? "map" : "home")}
+        onSolved={markSolved}
+        onNextTraining={startTraining}
+      />
+    );
+  }, [payload, mode, recommendation, solved, metrics]);
+
+  if (view === "game" && currentGame) return currentGame;
+  if (view === "map") return <LevelMap puzzles={puzzles} stages={stages} solved={solved} onBack={() => setView("home")} onPick={startPuzzle} />;
+  if (view === "clinic") return <Clinic puzzles={puzzles} onBack={() => setView("home")} onPick={startPuzzle} />;
+  if (view === "archive") return <ArchiveView puzzles={puzzles} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} />;
+  if (view === "lab") return <LabView puzzles={puzzles} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} />;
+  return <Home onNavigate={setView} onStartDaily={startDaily} onStartTraining={startTraining} stats={stats} />;
+}
