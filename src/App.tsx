@@ -21,12 +21,12 @@ import type { StageDefinition } from "../shared/puzzles";
 import type { CardState, CoachMessage, HintPack, Operator, PlayerMetrics, Puzzle, Solution, StoredAttempt } from "../shared/types";
 import { api, type PuzzlePayload } from "./api";
 
-type View = "home" | "map" | "game" | "clinic" | "archive" | "lab";
+type View = "home" | "map" | "game" | "clinic" | "archive" | "lab" | "supply";
 type Mode = "main" | "daily" | "training" | "lab";
 type HistoryItem = { cards: CardState[] };
 type Stats = { attempts: number; solvedPuzzles: number; discoveredSolutions: number; archive: Array<{ puzzleId: string; discovered: number }> };
 
-const opText: Record<Operator, string> = { "+": "+", "-": "-", "*": "×", "/": "÷" };
+const opText: Record<Operator, string> = { "+": "+", "-": "-", "*": "×", "/": "÷", concat: "拼" };
 
 const saveLocal = (key: string, value: unknown) => localStorage.setItem(key, JSON.stringify(value));
 const loadLocal = <T,>(key: string, fallback: T): T => {
@@ -41,6 +41,9 @@ const defaultMetrics: PlayerMetrics = {
   solvedStreak: 0,
   failedStreak: 0
 };
+
+const defaultWallet = { coins: 0, wisdomStars: 0 };
+const defaultInventory = { hintPacks: 0, deathShields: 0, jokers: 0, blindBoxTickets: 0 };
 
 const useClock = (running: boolean, startedAt: number | null) => {
   const [now, setNow] = useState(Date.now());
@@ -103,6 +106,11 @@ function Home({
           <Archive size={24} />
           <strong>解法档案</strong>
           <span>查看点亮进度</span>
+        </button>
+        <button className="mode-tile" onClick={() => onNavigate("supply")}>
+          <Sparkles size={24} />
+          <strong>补给站</strong>
+          <span>金币商店与科研盲盒</span>
         </button>
       </section>
 
@@ -183,7 +191,9 @@ function Game({
   onNextTraining: () => void;
 }) {
   const { puzzle, hints, solutionCount } = payload;
-  const [cards, setCards] = useState<CardState[]>(() => makeInitialCards(puzzle.cards));
+  const initialCards = useMemo(() => makeInitialCards(puzzle.cards), [puzzle.cards]);
+  const [cards, setCards] = useState<CardState[]>(() => initialCards.slice(0, puzzle.ruleSet.useCount));
+  const [reserveCards, setReserveCards] = useState<CardState[]>(() => initialCards.slice(puzzle.ruleSet.useCount));
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [selectedOp, setSelectedOp] = useState<Operator | null>(null);
@@ -197,7 +207,9 @@ function Game({
   const elapsed = useClock(!solution, startedAt);
 
   useEffect(() => {
-    setCards(makeInitialCards(puzzle.cards));
+    const nextInitial = makeInitialCards(puzzle.cards);
+    setCards(nextInitial.slice(0, puzzle.ruleSet.useCount));
+    setReserveCards(nextInitial.slice(puzzle.ruleSet.useCount));
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
@@ -208,7 +220,7 @@ function Game({
     setResult(null);
     setCoach(null);
     api.leaderboard(puzzle.id).then((data) => setLeaderboard(data.rows)).catch(() => setLeaderboard([]));
-  }, [puzzle.id, puzzle.cards]);
+  }, [puzzle.id, puzzle.cards, puzzle.ruleSet.useCount]);
 
   useEffect(() => {
     if (solution || elapsed < 15000) return;
@@ -278,7 +290,9 @@ function Game({
   };
 
   const reset = () => {
-    setCards(makeInitialCards(puzzle.cards));
+    const nextInitial = makeInitialCards(puzzle.cards);
+    setCards(nextInitial.slice(0, puzzle.ruleSet.useCount));
+    setReserveCards(nextInitial.slice(puzzle.ruleSet.useCount));
     setHistory([]);
     setSelectedCards([]);
     setSelectedOp(null);
@@ -292,6 +306,16 @@ function Game({
     const clinic = loadLocal<string[]>("clinic", []);
     saveLocal("clinic", Array.from(new Set([puzzle.id, ...clinic])));
     onBack();
+  };
+
+  const swapReserve = (reserveId: string) => {
+    if (history.length > 0 || solution || puzzle.variant !== "poison") return;
+    const incoming = reserveCards.find((card) => card.id === reserveId);
+    const outgoing = selectedCards[0] ? cards.find((card) => card.id === selectedCards[0]) : cards.at(-1);
+    if (!incoming || !outgoing) return;
+    setCards(cards.map((card) => (card.id === outgoing.id ? incoming : card)));
+    setReserveCards(reserveCards.map((card) => (card.id === incoming.id ? outgoing : card)));
+    setSelectedCards([incoming.id]);
   };
 
   return (
@@ -322,8 +346,21 @@ function Game({
         ))}
       </section>
 
+      {reserveCards.length > 0 && (
+        <section className="reserve-zone">
+          <p>毒苹果干扰区</p>
+          <div>
+            {reserveCards.map((card) => (
+              <button key={card.id} disabled={history.length > 0 || Boolean(solution)} onClick={() => swapReserve(card.id)}>
+                {formatFraction(card.value)}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="ops">
-        {(["+", "-", "*", "/"] as Operator[]).map((op) => (
+        {(["+", "-", "*", "/", "concat"] as Operator[]).map((op) => (
           <button key={op} disabled={!puzzle.ruleSet.operators.includes(op)} className={`op-button ${selectedOp === op ? "active" : ""}`} onClick={() => pickOp(op)}>
             {opText[op]}
           </button>
@@ -474,7 +511,6 @@ function ArchiveView({ puzzles, stats, onBack, onPick }: { puzzles: Puzzle[]; st
 }
 
 function LabView({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () => void; onPick: (puzzle: Puzzle) => void }) {
-  const labPuzzles = puzzles.filter((puzzle) => puzzle.boss).slice(0, 28);
   return (
     <main className="screen">
       <header className="topbar">
@@ -482,7 +518,7 @@ function LabView({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () =>
         <div><p className="eyebrow">异构实验室</p><h2>规则挑战</h2></div>
       </header>
       <section className="clinic-list">
-        {labPuzzles.map((puzzle) => (
+        {puzzles.map((puzzle) => (
           <button key={puzzle.id} onClick={() => onPick(puzzle)}>
             <strong>{puzzle.ruleSet.name}</strong>
             <span>{puzzle.stage} · {puzzle.cards.join("  ")} · {puzzle.ruleSet.description}</span>
@@ -493,15 +529,100 @@ function LabView({ puzzles, onBack, onPick }: { puzzles: Puzzle[]; onBack: () =>
   );
 }
 
+function SupplyView({
+  wallet,
+  inventory,
+  onBack,
+  onChange
+}: {
+  wallet: typeof defaultWallet;
+  inventory: typeof defaultInventory;
+  onBack: () => void;
+  onChange: (wallet: typeof defaultWallet, inventory: typeof defaultInventory) => void;
+}) {
+  const buy = (price: number, patch: Partial<typeof defaultInventory>) => {
+    if (wallet.coins < price) return;
+    onChange(
+      { ...wallet, coins: wallet.coins - price },
+      {
+        hintPacks: inventory.hintPacks + (patch.hintPacks ?? 0),
+        deathShields: inventory.deathShields + (patch.deathShields ?? 0),
+        jokers: inventory.jokers + (patch.jokers ?? 0),
+        blindBoxTickets: inventory.blindBoxTickets + (patch.blindBoxTickets ?? 0)
+      }
+    );
+  };
+  const draw = () => {
+    if (wallet.wisdomStars < 5) return;
+    const roll = (wallet.wisdomStars + wallet.coins + inventory.jokers * 7) % 3;
+    const prize =
+      roll === 0
+        ? { hintPacks: 2 }
+        : roll === 1
+          ? { jokers: 1 }
+          : { deathShields: 1 };
+    onChange(
+      { ...wallet, wisdomStars: wallet.wisdomStars - 5 },
+      {
+        hintPacks: inventory.hintPacks + (prize.hintPacks ?? 0),
+        deathShields: inventory.deathShields + (prize.deathShields ?? 0),
+        jokers: inventory.jokers + (prize.jokers ?? 0),
+        blindBoxTickets: inventory.blindBoxTickets
+      }
+    );
+  };
+  return (
+    <main className="screen">
+      <header className="topbar">
+        <button className="icon-button ghost" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <div><p className="eyebrow">补给站</p><h2>金币商店与科研盲盒</h2></div>
+      </header>
+      <section className="archive-summary">
+        <div><strong>{wallet.coins}</strong><span>金币</span></div>
+        <div><strong>{wallet.wisdomStars}</strong><span>智慧星</span></div>
+      </section>
+      <section className="inventory-row">
+        <span>锦囊 {inventory.hintPacks}</span>
+        <span>免死 {inventory.deathShields}</span>
+        <span>小丑 {inventory.jokers}</span>
+      </section>
+      <section className="shop-grid">
+        <button onClick={() => buy(100, { hintPacks: 1 })} disabled={wallet.coins < 100}>
+          <strong>初级思路锦囊</strong>
+          <span>100 金币 · 额外线索储备</span>
+        </button>
+        <button onClick={() => buy(500, { deathShields: 1 })} disabled={wallet.coins < 500}>
+          <strong>地狱免死金牌</strong>
+          <span>500 金币 · 地狱关失败保护</span>
+        </button>
+        <button onClick={() => buy(800, { jokers: 1 })} disabled={wallet.coins < 800}>
+          <strong>万能小丑牌</strong>
+          <span>800 金币 · 后续可替换数字</span>
+        </button>
+      </section>
+      <section className="blind-box">
+        <div>
+          <p>科研盲盒</p>
+          <strong>消耗 5 智慧星抽取稀有补给</strong>
+        </div>
+        <button onClick={draw} disabled={wallet.wisdomStars < 5}>抽 1 次</button>
+      </section>
+    </main>
+  );
+}
+
 export function App() {
   const [view, setView] = useState<View>("home");
   const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
+  const [labPuzzles, setLabPuzzles] = useState<Puzzle[]>([]);
   const [stages, setStages] = useState<StageDefinition[]>([]);
   const [payload, setPayload] = useState<PuzzlePayload | null>(null);
   const [mode, setMode] = useState<Mode>("main");
   const [recommendation, setRecommendation] = useState<string>();
   const [solved, setSolved] = useState(() => loadLocal<string[]>("solved", []));
   const [metrics, setMetrics] = useState(() => loadLocal<PlayerMetrics>("metrics", defaultMetrics));
+  const [wallet, setWallet] = useState(() => loadLocal("wallet", defaultWallet));
+  const [inventory, setInventory] = useState(() => loadLocal("inventory", defaultInventory));
   const [stats, setStats] = useState<Stats>();
 
   useEffect(() => {
@@ -509,6 +630,7 @@ export function App() {
       setPuzzles(data.puzzles);
       setStages(data.stages);
     });
+    api.lab().then((data) => setLabPuzzles(data.puzzles));
     api.stats().then(setStats).catch(() => undefined);
   }, []);
 
@@ -550,8 +672,13 @@ export function App() {
     };
     setSolved(nextSolved);
     setMetrics(nextMetrics);
+    const coinReward = Math.max(30, Math.round(80 + elapsedMs / 3000 - hintsUsed * 15));
+    const starReward = hintsUsed === 0 ? 1 : 0;
+    const nextWallet = { coins: wallet.coins + coinReward, wisdomStars: wallet.wisdomStars + starReward };
+    setWallet(nextWallet);
     saveLocal("solved", nextSolved);
     saveLocal("metrics", nextMetrics);
+    saveLocal("wallet", nextWallet);
     void refreshStats();
   };
 
@@ -567,12 +694,27 @@ export function App() {
         onNextTraining={startTraining}
       />
     );
-  }, [payload, mode, recommendation, solved, metrics]);
+  }, [payload, mode, recommendation, solved, metrics, wallet]);
 
   if (view === "game" && currentGame) return currentGame;
   if (view === "map") return <LevelMap puzzles={puzzles} stages={stages} solved={solved} onBack={() => setView("home")} onPick={startPuzzle} />;
   if (view === "clinic") return <Clinic puzzles={puzzles} onBack={() => setView("home")} onPick={startPuzzle} />;
-  if (view === "archive") return <ArchiveView puzzles={puzzles} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} />;
-  if (view === "lab") return <LabView puzzles={puzzles} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} />;
+  if (view === "archive") return <ArchiveView puzzles={[...puzzles, ...labPuzzles]} stats={stats} onBack={() => setView("home")} onPick={startPuzzle} />;
+  if (view === "lab") return <LabView puzzles={labPuzzles} onBack={() => setView("home")} onPick={(puzzle) => startPuzzle(puzzle, "lab")} />;
+  if (view === "supply") {
+    return (
+      <SupplyView
+        wallet={wallet}
+        inventory={inventory}
+        onBack={() => setView("home")}
+        onChange={(nextWallet, nextInventory) => {
+          setWallet(nextWallet);
+          setInventory(nextInventory);
+          saveLocal("wallet", nextWallet);
+          saveLocal("inventory", nextInventory);
+        }}
+      />
+    );
+  }
   return <Home onNavigate={setView} onStartDaily={startDaily} onStartTraining={startTraining} stats={stats} />;
 }

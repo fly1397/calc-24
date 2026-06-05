@@ -53,6 +53,46 @@ export const ruleSets: Record<string, RuleSet> = {
     name: "不许负数",
     description: "中间结果不能为负数。",
     allowNegative: false
+  },
+  concat: {
+    ...standardRuleSet,
+    id: "concat",
+    name: "数字拼接",
+    description: "允许把两张整数牌按点击顺序拼成多位数。",
+    operators: ["+", "-", "*", "/", "concat"],
+    allowConcat: true
+  },
+  poison5: {
+    ...standardRuleSet,
+    id: "poison-5",
+    name: "毒苹果 5选4",
+    description: "从 5 张牌里选择 4 张进入计算区，剩下一张是干扰项。",
+    cardCount: 5,
+    useCount: 4
+  },
+  poison6: {
+    ...standardRuleSet,
+    id: "poison-6",
+    name: "毒苹果 6选4",
+    description: "从 6 张牌里选择 4 张进入计算区，剩下两张是干扰项。",
+    cardCount: 6,
+    useCount: 4
+  },
+  grand5: {
+    ...standardRuleSet,
+    id: "grand-5",
+    name: "大满贯 5卡",
+    description: "5 张牌必须全部用完，最终得到 24。",
+    cardCount: 5,
+    useCount: 5
+  },
+  grand6: {
+    ...standardRuleSet,
+    id: "grand-6",
+    name: "大满贯 6卡",
+    description: "6 张牌必须全部用完，依靠抵消策略得到 24。",
+    cardCount: 6,
+    useCount: 6
   }
 };
 
@@ -155,6 +195,7 @@ const makePuzzleBank = (): Puzzle[] => {
         ds: selected.ds,
         tags: Array.from(new Set([...(boss ? ["考试"] : []), ...selected.tags, ...ruleSet.name.split(" ")])),
         boss,
+        variant: "standard",
         ruleSet,
         solutionCount: Math.max(1, ruleSolutions.length)
       });
@@ -166,9 +207,51 @@ const makePuzzleBank = (): Puzzle[] => {
 
 export const puzzles: Puzzle[] = makePuzzleBank();
 
-export const getPuzzleById = (id: string): Puzzle | undefined => puzzles.find((puzzle) => puzzle.id === id);
+const makeLabPuzzle = (
+  index: number,
+  title: string,
+  cards: number[],
+  ruleSet: RuleSet,
+  variant: Puzzle["variant"],
+  ds: number,
+  tags: string[]
+): Puzzle => {
+  const solutions = solvePuzzle(cards, 24, 40, ruleSet);
+  return {
+    id: `lab-${index}`,
+    seed: `LAB-${index}-${cards.join("")}-${ruleSet.id}`,
+    title,
+    stage: "异构实验室",
+    stageIndex: 99,
+    level: index,
+    stageLevel: index,
+    cards,
+    target: 24,
+    ds,
+    tags,
+    boss: false,
+    variant,
+    ruleSet,
+    solutionCount: Math.max(1, solutions.length)
+  };
+};
 
-export const getPuzzleBySeed = (seed: string): Puzzle | undefined => puzzles.find((puzzle) => puzzle.seed === seed);
+export const labPuzzles: Puzzle[] = [
+  makeLabPuzzle(1, "毒苹果入门", [10, 1, 5, 6, 9], ruleSets.poison5, "poison", 38, ["5选4", "干扰项"]),
+  makeLabPuzzle(2, "毒苹果双干扰", [8, 4, 1, 8, 7, 11], ruleSets.poison6, "poison", 52, ["6选4", "干扰项"]),
+  makeLabPuzzle(3, "大满贯入门", [1, 2, 3, 4, 6], ruleSets.grand5, "grand", 58, ["5卡全用", "抵消"]),
+  makeLabPuzzle(4, "大满贯抵消", [2, 3, 4, 6, 8], ruleSets.grand5, "grand", 68, ["5卡全用", "抵消"]),
+  makeLabPuzzle(5, "六卡硬算", [1, 2, 3, 4, 6, 8], ruleSets.grand6, "grand", 76, ["6卡全用", "高压"]),
+  makeLabPuzzle(6, "打破次元壁", [1, 2, 4, 2], ruleSets.concat, "concat", 45, ["数字拼接"]),
+  makeLabPuzzle(7, "拼接反推", [1, 2, 3, 6], ruleSets.concat, "concat", 48, ["数字拼接"]),
+  makeLabPuzzle(8, "拼接深水", [2, 4, 1, 8], ruleSets.concat, "concat", 62, ["数字拼接", "反向构造"])
+];
+
+export const allPuzzles: Puzzle[] = [...puzzles, ...labPuzzles];
+
+export const getPuzzleById = (id: string): Puzzle | undefined => allPuzzles.find((puzzle) => puzzle.id === id);
+
+export const getPuzzleBySeed = (seed: string): Puzzle | undefined => allPuzzles.find((puzzle) => puzzle.seed === seed);
 
 export const dailyPuzzleForDate = (date = new Date()): Puzzle => {
   const start = Date.UTC(2026, 0, 1);

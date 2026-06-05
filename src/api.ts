@@ -24,6 +24,7 @@ const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
 export const api = {
   puzzles: () => request<{ puzzles: Puzzle[] }>("/api/puzzles"),
   puzzleIndex: () => request<{ puzzles: Puzzle[]; stages: StageDefinition[] }>("/api/puzzles"),
+  lab: () => request<{ puzzles: Puzzle[] }>("/api/lab"),
   puzzle: (id: string) => request<PuzzlePayload>(`/api/puzzles/${id}`),
   daily: () => request<PuzzlePayload>("/api/daily"),
   seed: (seed: string) => request<PuzzlePayload>(`/api/seed/${encodeURIComponent(seed)}`),

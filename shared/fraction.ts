@@ -30,7 +30,8 @@ export const operate = (a: Fraction, b: Fraction, op: Operator): Fraction | null
     if (op === "+") return add(a, b);
     if (op === "-") return sub(a, b);
     if (op === "*") return mul(a, b);
-    return b.n === 0 ? null : div(a, b);
+    if (op === "/") return b.n === 0 ? null : div(a, b);
+    return null;
   } catch {
     return null;
   }

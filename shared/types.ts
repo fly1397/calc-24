@@ -1,4 +1,4 @@
-export type Operator = "+" | "-" | "*" | "/";
+export type Operator = "+" | "-" | "*" | "/" | "concat";
 
 export type RuleSet = {
   id: string;
@@ -7,6 +7,7 @@ export type RuleSet = {
   operators: Operator[];
   allowNegative: boolean;
   allowFraction: boolean;
+  allowConcat?: boolean;
   cardCount: number;
   useCount: number;
   requiredOperator?: Operator;
@@ -52,8 +53,21 @@ export type Puzzle = {
   ds: number;
   tags: string[];
   boss: boolean;
+  variant: "standard" | "poison" | "grand" | "concat" | "hell";
   ruleSet: RuleSet;
   solutionCount: number;
+};
+
+export type Wallet = {
+  coins: number;
+  wisdomStars: number;
+};
+
+export type Inventory = {
+  hintPacks: number;
+  deathShields: number;
+  jokers: number;
+  blindBoxTickets: number;
 };
 
 export type Solution = {

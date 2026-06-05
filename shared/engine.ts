@@ -2,6 +2,7 @@ import { equalsFraction, formatFraction, makeFraction, operate } from "./fractio
 import type { CardState, CoachMessage, ExprNode, HintPack, Operator, PlayerMetrics, Puzzle, RuleSet, Solution } from "./types";
 
 const operators: Operator[] = ["+", "-", "*", "/"];
+const allOperators: Operator[] = ["+", "-", "*", "/", "concat"];
 export const standardRuleSet: RuleSet = {
   id: "standard",
   name: "标准 24 点",
@@ -22,9 +23,9 @@ export const makeInitialCards = (numbers: number[]): CardState[] =>
     return { id, value, expr };
   });
 
-const opLabel = (op: Operator): string => (op === "*" ? "×" : op === "/" ? "÷" : op);
+const opLabel = (op: Operator): string => (op === "*" ? "×" : op === "/" ? "÷" : op === "concat" ? "拼" : op);
 
-const precedence = (op: Operator): number => (op === "+" || op === "-" ? 1 : 2);
+const precedence = (op: Operator): number => (op === "+" || op === "-" ? 1 : op === "concat" ? 3 : 2);
 
 export const expressionToString = (node: ExprNode, parentOp?: Operator, isRight = false): string => {
   if (node.type === "leaf") return node.label;
@@ -65,6 +66,7 @@ const solutionTags = (node: ExprNode): string[] => {
   const tags = new Set<string>();
   const walk = (item: ExprNode) => {
     if (item.type === "leaf") return;
+    if (item.op === "concat") tags.add("数字拼接");
     if (item.op === "/") tags.add("除法解");
     if (item.value.d !== 1) tags.add("分数中转");
     if (item.op === "-") tags.add("减法构造");
@@ -82,7 +84,12 @@ const solutionTags = (node: ExprNode): string[] => {
 
 export const mergeCards = (left: CardState, right: CardState, op: Operator, ruleSet: RuleSet = standardRuleSet): CardState | null => {
   if (!ruleSet.operators.includes(op)) return null;
-  const value = operate(left.value, right.value, op);
+  const value =
+    op === "concat"
+      ? left.value.d === 1 && right.value.d === 1 && left.value.n >= 0 && right.value.n >= 0
+        ? makeFraction(Number(`${left.value.n}${right.value.n}`))
+        : null
+      : operate(left.value, right.value, op);
   if (!value) return null;
   if (!ruleSet.allowNegative && value.n < 0) return null;
   if (!ruleSet.allowFraction && value.d !== 1) return null;
@@ -120,7 +127,32 @@ const satisfiesRule = (node: ExprNode, ruleSet: RuleSet): boolean => {
   return true;
 };
 
+const combinations = <T,>(items: T[], count: number): T[][] => {
+  if (count >= items.length) return [items];
+  const result: T[][] = [];
+  const walk = (start: number, picked: T[]) => {
+    if (picked.length === count) {
+      result.push(picked);
+      return;
+    }
+    for (let index = start; index < items.length; index += 1) {
+      walk(index + 1, [...picked, items[index]]);
+    }
+  };
+  walk(0, []);
+  return result;
+};
+
 export const solvePuzzle = (numbers: number[], target = 24, maxSolutions = 80, ruleSet: RuleSet = standardRuleSet): Solution[] => {
+  if (numbers.length > ruleSet.useCount) {
+    const seen = new Map<string, Solution>();
+    combinations(numbers, ruleSet.useCount).forEach((group) => {
+      solvePuzzle(group, target, maxSolutions, { ...ruleSet, cardCount: ruleSet.useCount }).forEach((solution) => {
+        if (seen.size < maxSolutions) seen.set(`${group.join("-")}:${solution.key}`, solution);
+      });
+    });
+    return Array.from(seen.values());
+  }
   const targetValue = makeFraction(target);
   const seen = new Map<string, Solution>();
   const search = (cards: CardState[]) => {
@@ -136,7 +168,7 @@ export const solvePuzzle = (numbers: number[], target = 24, maxSolutions = 80, r
       for (let j = 0; j < cards.length; j += 1) {
         if (i === j) continue;
         const rest = cards.filter((_, index) => index !== i && index !== j);
-        for (const op of operators) {
+        for (const op of allOperators) {
           if (!ruleSet.operators.includes(op)) continue;
           if ((op === "+" || op === "*") && j < i) continue;
           const merged = mergeCards(cards[i], cards[j], op, ruleSet);

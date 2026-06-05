@@ -1,6 +1,6 @@
 import express from "express";
 import path from "node:path";
-import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, puzzles, stages } from "../shared/puzzles";
+import { closestPuzzleByDs, dailyPuzzleForDate, getPuzzleById, getPuzzleBySeed, labPuzzles, puzzles, stages } from "../shared/puzzles";
 import { coachForState, makeHints, recommendDifficulty, scoreAttempt } from "../shared/engine";
 import { addAttempt, attemptsForPuzzle, readStore } from "./store";
 import type { PlayerMetrics, StoredAttempt } from "../shared/types";
@@ -17,6 +17,10 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/puzzles", (_req, res) => {
   res.json({ puzzles, stages });
+});
+
+app.get("/api/lab", (_req, res) => {
+  res.json({ puzzles: labPuzzles });
 });
 
 app.get("/api/puzzles/:id", (req, res) => {
